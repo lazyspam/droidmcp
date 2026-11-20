@@ -16,7 +16,12 @@ import dev.droidmcp.Mcp
 import dev.droidmcp.Shell
 import java.io.File
 
-enum class TermKind(val label: String) { ALPINE("Alpine"), ANDROID("Android"), TERMUX("Termux") }
+enum class TermKind(val label: String, val distro: dev.droidmcp.Distro? = null) {
+    ALPINE("Alpine", dev.droidmcp.Distro.ALPINE), UBUNTU("Ubuntu", dev.droidmcp.Distro.UBUNTU),
+    ANDROID("Android"), TERMUX("Termux");
+
+    companion object { fun of(d: dev.droidmcp.Distro) = entries.first { it.distro == d } }
+}
 
 /** One terminal tab. */
 class TermTab(val id: Int, val kind: TermKind, val session: TerminalSession) {
@@ -95,7 +100,7 @@ object Terminals {
     fun open(ctx: Context, kind: TermKind): TermTab {
         val id = nextId++
         val session = when (kind) {
-            TermKind.ALPINE -> linuxSession(ctx)
+            TermKind.ALPINE, TermKind.UBUNTU -> linuxSession(ctx, kind.distro!!)
             TermKind.ANDROID -> androidSession(ctx)
             TermKind.TERMUX -> termuxSession(ctx)
         }
@@ -113,11 +118,14 @@ object Terminals {
         else if (i < current) current--
     }
 
-    private const val WELCOME = "printf '\\033[32m> Welcome to DroidMCP Terminal\\033[0m\\n" +
-        "\\033[90mAlpine Linux · apk add <package> installs anything · your files are in /sdcard\\033[0m\\n\\n'"
+    private fun welcome(d: dev.droidmcp.Distro): String {
+        val pm = if (d == dev.droidmcp.Distro.UBUNTU) "apt install <package>" else "apk add <package>"
+        return "printf '\\033[32m> Welcome to DroidMCP Terminal\\033[0m\\n" +
+            "\\033[90m${d.label} · $pm installs anything · your files are in /sdcard\\033[0m\\n\\n'"
+    }
 
-    private fun linuxSession(ctx: Context): TerminalSession {
-        val env = LinuxEnv(ctx)
+    private fun linuxSession(ctx: Context, distro: dev.droidmcp.Distro): TerminalSession {
+        val env = LinuxEnv(ctx, distro)
         // Prompt: blue working dir, then $; set after /etc/profile via $ENV (read by interactive ash/bash).
         val rc = File(env.rootfs, "root/.droidmcp_rc")
         if (!rc.exists()) {
@@ -127,7 +135,7 @@ object Terminals {
                     "alias ls='ls --color=auto'\nalias ll='ls -la'\n"
             )
         }
-        val script = "$WELCOME; export ENV=/root/.droidmcp_rc; " +
+        val script = "${welcome(distro)}; export ENV=/root/.droidmcp_rc; " +
             "if command -v bash >/dev/null; then exec bash --rcfile /root/.droidmcp_rc -i; else exec /bin/sh -l; fi"
         val (argv, vars) = env.invocation(script)
         val envList = vars.map { "${it.key}=${it.value}" } + listOf("PATH=/system/bin", "TERM=xterm-256color")

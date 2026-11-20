@@ -39,6 +39,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -73,7 +74,7 @@ import dev.droidmcp.R
 import dev.droidmcp.Status
 
 private enum class Page(val title: String) {
-    CONNECTION("Connection"), ISLAND("Bubble"), SECURITY("Security"),
+    CONNECTION("Connection"), ISLAND("Bubble"), LINUX("Linux"), SECURITY("Security"),
     PERMISSIONS("Permissions"), GENERAL("General"), ABOUT("About"),
 }
 
@@ -95,6 +96,7 @@ fun SettingsScreen(state: AppState, restart: () -> Unit) {
             when (p) {
                 Page.CONNECTION -> ConnectionPage(state, restart)
                 Page.ISLAND -> IslandSection(state)
+                Page.LINUX -> LinuxPage()
                 Page.SECURITY -> SecurityPage(state, restart)
                 Page.PERMISSIONS -> PermissionsPage(state)
                 Page.GENERAL -> GeneralPage()
@@ -117,6 +119,8 @@ private fun SettingsHome(state: AppState, open: (Page) -> Unit) {
         Group {
             CategoryRow({ IconTile(Icons.Outlined.Link) }, "Connection",
                 (if (ui.connected) "Connected" else if (ui.running) "Not connected" else "Off") + " · ${ui.deviceId}") { open(Page.CONNECTION) }
+            Divider()
+            CategoryRow({ IconTile(Icons.Outlined.Terminal) }, "Linux", linuxSummary(ctx)) { open(Page.LINUX) }
             Divider()
             CategoryRow({ IconTile(Icons.Outlined.ChatBubbleOutline) }, "Bubble",
                 if (!Prefs.island(ctx)) "Off" else "${if (island.position == "left") "Left" else "Right"} edge · ${(island.opacity * 100).toInt()}%") { open(Page.ISLAND) }
@@ -402,6 +406,86 @@ private fun LinkRow(title: String, subtitle: String, url: String) {
         }
         Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
     }
+}
+
+private fun linuxSummary(ctx: android.content.Context): String {
+    dev.droidmcp.Distro.entries.forEach { LinuxDownloads.changed[it] }
+    val def = Prefs.defaultDistro(ctx)
+    val installed = dev.droidmcp.Distro.entries.filter { dev.droidmcp.LinuxEnv(ctx, it).installed }
+    return "Default ${def.label.substringBefore(' ')}" + when (installed.size) {
+        0 -> " · nothing downloaded"
+        else -> " · ${installed.size} installed"
+    }
+}
+
+/** Download, delete and choose the default distro. */
+@Composable
+private fun LinuxPage() {
+    val ctx = LocalContext.current
+    var def by remember { mutableStateOf(Prefs.defaultDistro(ctx)) }
+    var confirm by remember { mutableStateOf<dev.droidmcp.Distro?>(null) }
+    Text("Linux runs inside the app with proot: no root or Termux needed. The default is used by new terminals and by the AI.",
+        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+    dev.droidmcp.Distro.entries.forEach { d ->
+        LinuxDownloads.changed[d]
+        val env = remember(LinuxDownloads.changed[d]) { dev.droidmcp.LinuxEnv(ctx, d) }
+        val installed = env.installed
+        var size by remember(LinuxDownloads.changed[d]) { mutableStateOf<Long?>(null) }
+        androidx.compose.runtime.LaunchedEffect(LinuxDownloads.changed[d], installed) {
+            if (installed) size = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { env.sizeBytes() }
+        }
+        val progress = LinuxDownloads.progress[d]
+        Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SessionIcon(TermKind.of(d), size = 36)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(d.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            if (d == def) { Spacer(Modifier.width(8.dp)); Chip("Default", StatusColors.live) }
+                        }
+                        Text(
+                            when {
+                                progress != null -> progress
+                                installed -> "Installed ${env.version}" + (size?.let { " · ${formatSize(it)}" } ?: "")
+                                else -> "${d.blurb} · ${d.sizeHint} download"
+                            },
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                LinuxDownloads.errors[d]?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = StatusColors.error, modifier = Modifier.padding(top = 8.dp))
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when {
+                        progress != null -> androidx.compose.material3.LinearProgressIndicator(Modifier.weight(1f).padding(vertical = 12.dp))
+                        !installed -> Button(onClick = { LinuxDownloads.start(ctx, d) }) { Text("Download") }
+                        else -> androidx.compose.material3.OutlinedButton(onClick = { confirm = d }) { Text("Delete") }
+                    }
+                    if (d != def && progress == null) {
+                        androidx.compose.material3.FilledTonalButton(onClick = { def = d; Prefs.setDefaultDistro(ctx, d) }) { Text("Make default") }
+                    }
+                }
+            }
+        }
+    }
+    confirm?.let { d ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            text = { Text("Delete ${d.label}? Everything installed in it and its /root files are removed. Open ${d.label.substringBefore(' ')} sessions close.") },
+            confirmButton = { TextButton(onClick = { LinuxDownloads.uninstall(ctx, d) {}; confirm = null }) { Text("Delete") } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } },
+        )
+    }
+}
+
+private fun formatSize(b: Long) = when {
+    b >= 1L shl 30 -> "%.1f GB".format(b / (1L shl 30).toDouble())
+    b >= 1L shl 20 -> "${b shr 20} MB"
+    else -> "${b shr 10} KB"
 }
 
 private fun status(ok: Boolean) = if (ok) "allowed" else "not allowed"

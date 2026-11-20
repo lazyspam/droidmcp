@@ -19,51 +19,95 @@ import java.util.zip.GZIPInputStream
  * apps may only execute files from their native library directory, not from their data directory.
  * proot's loader then runs the Alpine binaries from the data directory on its behalf.
  */
-class LinuxEnv(private val ctx: Context) {
-    private val base = File(ctx.filesDir, "linux")
+/** Linux distributions DroidMCP can download and run. */
+enum class Distro(val id: String, val label: String, val sizeHint: String, val blurb: String) {
+    ALPINE("alpine", "Alpine Linux", "3 MB", "Tiny and fast · apk"),
+    UBUNTU("ubuntu", "Ubuntu 26.04", "30 MB", "Runs most prebuilt Linux software · apt");
+
+    companion object {
+        fun of(id: String?): Distro? = entries.firstOrNull { it.id.equals(id?.trim(), ignoreCase = true) }
+    }
+}
+
+class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
+    // Alpine keeps its original location so existing installs carry over.
+    private val base = File(ctx.filesDir, if (distro == Distro.ALPINE) "linux" else "linux-${distro.id}")
     val rootfs = File(base, "rootfs")
     private val tmp = File(base, "tmp")
     private val ready = File(base, ".installed")
     private val nativeDir = File(ctx.applicationInfo.nativeLibraryDir)
 
-    // Don't test bin/sh: it's an absolute symlink to /bin/busybox, which Java resolves against Android's own /bin.
-    val installed: Boolean get() = ready.isFile && File(rootfs, "etc/alpine-release").isFile
+    // Check real directories, not symlinks like bin/sh (absolute links resolve against Android's own /bin).
+    val installed: Boolean get() = ready.isFile && File(rootfs, "etc").isDirectory && File(rootfs, "usr/bin").isDirectory
 
-    private fun alpineArch(): String {
-        for (abi in Build.SUPPORTED_ABIS) {
-            when (abi) {
-                "arm64-v8a" -> return "aarch64"
-                "x86_64" -> return "x86_64"
-                "armeabi-v7a" -> return "armv7"
-            }
-        }
-        throw ToolError("Unsupported CPU (${Build.SUPPORTED_ABIS.joinToString()}). Alpine needs arm64, armv7 or x86_64.")
+    /** Version recorded at install time. */
+    val version: String get() = runCatching { ready.readText().trim() }.getOrDefault("")
+
+    /** Disk used, in bytes (walks the tree; call off the main thread). */
+    fun sizeBytes(): Long = if (!base.exists()) 0 else base.walkTopDown().onEnter { !java.nio.file.Files.isSymbolicLink(it.toPath()) }
+        .filter { it.isFile && !java.nio.file.Files.isSymbolicLink(it.toPath()) }.sumOf { it.length() }
+
+    /** Removes the distro and everything installed in it. */
+    @Synchronized
+    fun uninstall() {
+        ready.delete()
+        base.deleteRecursively()
     }
 
-    /** Downloads and unpacks Alpine. Safe to call again; does nothing if already installed unless [force]. */
+    private fun arch(): String {
+        for (abi in Build.SUPPORTED_ABIS) {
+            val a = when (distro) {
+                Distro.ALPINE -> when (abi) { "arm64-v8a" -> "aarch64"; "x86_64" -> "x86_64"; "armeabi-v7a" -> "armv7"; else -> null }
+                Distro.UBUNTU -> when (abi) { "arm64-v8a" -> "arm64"; "x86_64" -> "amd64"; "armeabi-v7a" -> "armhf"; else -> null }
+            }
+            if (a != null) return a
+        }
+        throw ToolError("Unsupported CPU (${Build.SUPPORTED_ABIS.joinToString()}) for ${distro.label}.")
+    }
+
+    /** Where to download from: (url, sha256 or null, version). */
+    private fun locate(http: OkHttpClient, arch: String, progress: (String) -> Unit): Triple<String, String?, String> {
+        progress("Finding the latest ${distro.label} release for $arch…")
+        return when (distro) {
+            Distro.ALPINE -> {
+                val mirror = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/$arch"
+                val yaml = get(http, "$mirror/latest-releases.yaml").use { it.bufferedReader().readText() }
+                val block = yaml.split("\n-").firstOrNull { it.contains("flavor: alpine-minirootfs") }
+                    ?: throw ToolError("Couldn't find a minirootfs in Alpine's release list.")
+                val file = Regex("file:\\s*(\\S+)").find(block)?.groupValues?.get(1) ?: throw ToolError("Malformed Alpine release list.")
+                val sha = Regex("sha256:\\s*([0-9a-f]{64})").find(block)?.groupValues?.get(1)
+                val version = Regex("version:\\s*(\\S+)").find(block)?.groupValues?.get(1) ?: "?"
+                Triple("$mirror/$file", sha, version)
+            }
+            Distro.UBUNTU -> {
+                val dir = "https://cdimage.ubuntu.com/ubuntu-base/releases/26.04/release"
+                val sums = get(http, "$dir/SHA256SUMS").use { it.bufferedReader().readText() }
+                // Lines look like: "<sha> *ubuntu-base-26.04.1-base-arm64.tar.gz". Pick the newest point release.
+                val re = Regex("^([0-9a-f]{64}) \\*?(ubuntu-base-(26\\.04(?:\\.(\\d+))?)-base-$arch\\.tar\\.gz)$", RegexOption.MULTILINE)
+                val best = re.findAll(sums).maxByOrNull { it.groupValues[4].toIntOrNull() ?: 0 }
+                    ?: throw ToolError("No Ubuntu Base image for $arch in Ubuntu's release list.")
+                Triple("$dir/${best.groupValues[2]}", best.groupValues[1], best.groupValues[3])
+            }
+        }
+    }
+
+    /** Downloads and unpacks the distro. Safe to call again; does nothing if already installed unless [force]. */
     @Synchronized
     fun setup(force: Boolean = false, progress: (String) -> Unit = {}): String {
-        if (installed && !force) return "Alpine Linux is already installed."
+        if (installed && !force) return "${distro.label} is already installed."
         val proot = File(nativeDir, "libproot.so")
         if (!proot.exists()) throw ToolError("proot is missing from this build (${nativeDir.path}). Reinstall the app.")
 
-        val arch = alpineArch()
+        val arch = arch()
         val http = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
-        val mirror = "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/$arch"
-
-        progress("Finding the latest Alpine release for $arch…")
-        val yaml = get(http, "$mirror/latest-releases.yaml").use { it.bufferedReader().readText() }
-        val block = yaml.split("\n-").firstOrNull { it.contains("flavor: alpine-minirootfs") }
-            ?: throw ToolError("Couldn't find a minirootfs in Alpine's release list.")
-        val file = Regex("file:\\s*(\\S+)").find(block)?.groupValues?.get(1) ?: throw ToolError("Malformed Alpine release list.")
-        val sha = Regex("sha256:\\s*([0-9a-f]{64})").find(block)?.groupValues?.get(1)
-        val version = Regex("version:\\s*(\\S+)").find(block)?.groupValues?.get(1) ?: "?"
+        val (url, sha, version) = locate(http, arch, progress)
+        val file = url.substringAfterLast('/')
 
         progress("Downloading $file…")
         base.mkdirs()
         val archive = File(base, "rootfs.tar.gz.part")
         val digest = MessageDigest.getInstance("SHA-256")
-        get(http, "$mirror/$file").use { input ->
+        get(http, url).use { input ->
             archive.outputStream().use { out ->
                 val buf = ByteArray(64 * 1024)
                 while (true) {
@@ -88,28 +132,46 @@ class LinuxEnv(private val ctx: Context) {
             archive.inputStream().use { Tar.extract(GZIPInputStream(BufferedInputStream(it)), rootfs) }
         } catch (e: Exception) {
             rootfs.deleteRecursively()
-            throw ToolError("Unpacking Alpine failed: ${e.message}")
+            throw ToolError("Unpacking ${distro.label} failed: ${e.message}")
         } finally {
             archive.delete()
         }
 
-        // Android has no /etc/resolv.conf, so Alpine needs its own DNS settings.
-        File(rootfs, "etc/resolv.conf").writeText("nameserver 1.1.1.1\nnameserver 8.8.8.8\n")
+        configure()
+
+        progress("Checking that it runs…")
+        val check = run(". /etc/os-release && echo \"\$PRETTY_NAME\"", 60)
+        if (check.exitCode != 0) {
+            throw ToolError("${distro.label} unpacked but won't run under proot (exit ${check.exitCode}): ${check.stderr.take(1500)}")
+        }
+        ready.writeText(version)
+        val hint = if (distro == Distro.UBUNTU) "`apt update && apt install -y python3 git`" else "`apk add python3 git`"
+        return "Installed ${check.out.trim()} ($arch). Install packages with $hint."
+    }
+
+    /** Fixes a fresh rootfs for life under proot on Android. */
+    private fun configure() {
+        // Android has no /etc/resolv.conf: give the distro its own DNS. (resolv.conf may be a dangling symlink.)
+        File(rootfs, "etc/resolv.conf").let { it.delete(); it.writeText("nameserver 1.1.1.1\nnameserver 8.8.8.8\n") }
         File(rootfs, "etc/hosts").writeText("127.0.0.1 localhost\n::1 localhost ip6-localhost ip6-loopback\n")
         File(rootfs, "root").mkdirs()
         File(rootfs, "tmp").mkdirs()
         tmp.mkdirs()
-
-        progress("Checking that it runs…")
-        val check = run("cat /etc/alpine-release", 60)
-        if (check.exitCode != 0) {
-            throw ToolError("Alpine unpacked but won't run under proot (exit ${check.exitCode}): ${check.stderr.take(1500)}")
+        // Name Android's supplementary groups (inet, net_raw, …) so tools don't warn about unknown group IDs.
+        File(rootfs, "etc/group").let { g ->
+            if (g.isFile && !g.readText().contains("aid_inet")) {
+                g.appendText("aid_inet:x:3003:root\naid_net_raw:x:3004:root\naid_sdcard_rw:x:1015:root\naid_everybody:x:9997:root\n")
+            }
         }
-        ready.writeText(version)
-        return "Installed Alpine Linux ${check.out.trim()} ($arch). Install packages with `apk add python3 git` etc."
+        if (distro == Distro.UBUNTU) {
+            // apt drops to the _apt user for downloads; that can't work under proot's fake root.
+            File(rootfs, "etc/apt/apt.conf.d").mkdirs()
+            File(rootfs, "etc/apt/apt.conf.d/99droidmcp").writeText(
+                "APT::Sandbox::User \"root\";\nAcquire::Retries \"3\";\nDpkg::Use-Pty \"0\";\n")
+        }
     }
 
-    /** Runs a shell command inside Alpine. */
+    /** Runs a shell command inside the distro. */
     fun run(command: String, timeoutSec: Long): ShellResult {
         val (argv, env) = invocation(command)
         return Shell.exec(argv, env, timeoutSec, removeEnv = listOf("LD_PRELOAD"))
@@ -125,6 +187,9 @@ class LinuxEnv(private val ctx: Context) {
             "-0",
             "-r", rootfs.path,
             "-b", "/dev", "-b", "/proc", "-b", "/sys",
+            // Bash process substitution and friends expect these.
+            "-b", "/proc/self/fd:/dev/fd", "-b", "/proc/self/fd/0:/dev/stdin",
+            "-b", "/proc/self/fd/1:/dev/stdout", "-b", "/proc/self/fd/2:/dev/stderr",
         )
         // Share phone storage when the app can see it.
         for (p in listOf("/sdcard", "/storage")) if (File(p).exists()) argv += listOf("-b", p)

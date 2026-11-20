@@ -83,25 +83,30 @@ private object Mods {
 @Composable
 fun TerminalScreen() {
     val ctx = LocalContext.current
-    val linux = remember { LinuxEnv(ctx) }
-    var installed by remember { mutableStateOf(linux.installed) }
+    val default = remember { dev.droidmcp.Prefs.defaultDistro(ctx) }
+    // A distro the user asked for that still needs downloading (shown over the terminal until done or cancelled).
+    var setupFor by remember { mutableStateOf<dev.droidmcp.Distro?>(null) }
 
-    // Open the first session on first visit: Alpine if ready, otherwise wait for setup.
-    LaunchedEffect(installed) {
-        if (Terminals.tabs.isEmpty() && installed) Terminals.open(ctx, TermKind.ALPINE)
+    // First visit: open the default distro if it's ready, otherwise offer to download it.
+    LaunchedEffect(Unit) {
+        if (Terminals.tabs.isEmpty()) {
+            if (LinuxEnv(ctx, default).installed) Terminals.open(ctx, TermKind.of(default)) else setupFor = default
+        }
     }
 
     Column(Modifier.fillMaxSize().background(TermBg)) {
         TopBar(onNew = { kind ->
-            if (kind == TermKind.ALPINE && !linux.installed) return@TopBar
-            Terminals.open(ctx, kind)
-        }, linuxReady = installed)
+            val d = kind.distro
+            if (d != null && !LinuxEnv(ctx, d).installed) setupFor = d else { setupFor = null; Terminals.open(ctx, kind) }
+        })
         val tab = Terminals.active
         Box(Modifier.weight(1f).fillMaxWidth()) {
+            val pending = setupFor
             when {
+                pending != null -> SetupLinux(pending, canCancel = tab != null,
+                    onCancel = { setupFor = null }) { setupFor = null; Terminals.open(ctx, TermKind.of(pending)) }
                 tab != null -> TerminalPane(tab)
-                !installed -> SetupLinux(linux) { installed = true }
-                else -> EmptyState { Terminals.open(ctx, TermKind.ALPINE) }
+                else -> EmptyState { setupFor = default }
             }
         }
         // Shortcuts belong to typing: shown as soon as the keyboard starts opening, in the same single resize.
@@ -112,7 +117,7 @@ fun TerminalScreen() {
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
+private fun TopBar(onNew: (TermKind) -> Unit) {
     val ctx = LocalContext.current
     var sessionsOpen by remember { mutableStateOf(false) }
     var newOpen by remember { mutableStateOf(false) }
@@ -153,11 +158,20 @@ private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
         Box {
             RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
             AppMenu(expanded = newOpen, onDismiss = { newOpen = false }) {
-                AppMenuItem(
-                    leadingIcon = { SessionIcon(TermKind.ALPINE) },
-                    text = { Column { Text("Alpine Linux"); Text("apk, git, python…", style = MaterialTheme.typography.bodySmall) } },
-                    enabled = linuxReady, onClick = { newOpen = false; onNew(TermKind.ALPINE) },
-                )
+                // Every distro is listed; ones not downloaded yet say so (recognition over recall).
+                dev.droidmcp.Distro.entries.forEach { d ->
+                    LinuxDownloads.changed[d] // re-read installed state after a download
+                    val ready = LinuxEnv(ctx, d).installed
+                    AppMenuItem(
+                        leadingIcon = { SessionIcon(TermKind.of(d)) },
+                        text = { Column {
+                            Text(d.label)
+                            Text(if (ready) d.blurb else if (LinuxDownloads.busy(d)) "Downloading…" else "Download · ${d.sizeHint}",
+                                style = MaterialTheme.typography.bodySmall)
+                        } },
+                        onClick = { newOpen = false; onNew(TermKind.of(d)) },
+                    )
+                }
                 if (Terminals.termuxAvailable(ctx)) {
                     AppMenuItem(
                         leadingIcon = { SessionIcon(TermKind.TERMUX) },
@@ -226,6 +240,7 @@ private fun RenameDialog(tab: TermTab, onDone: () -> Unit) {
 fun SessionIcon(kind: TermKind, dimmed: Boolean = false, size: Int = 24) {
     val res = when (kind) {
         TermKind.ALPINE -> dev.droidmcp.R.drawable.ic_session_alpine
+        TermKind.UBUNTU -> dev.droidmcp.R.drawable.ic_session_ubuntu
         TermKind.ANDROID -> dev.droidmcp.R.drawable.ic_session_android
         TermKind.TERMUX -> dev.droidmcp.R.drawable.ic_session_termux
     }
@@ -354,36 +369,40 @@ private fun Key(label: String, active: Boolean = false, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SetupLinux(linux: LinuxEnv, onDone: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var busy by remember { mutableStateOf(false) }
-    var progress by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+private fun SetupLinux(distro: dev.droidmcp.Distro, canCancel: Boolean, onCancel: () -> Unit, onDone: () -> Unit) {
+    val ctx = LocalContext.current
+    val progress = LinuxDownloads.progress[distro]
+    val error = LinuxDownloads.errors[distro]
+    LinuxDownloads.changed[distro]
+    // Finished (here or from Settings): open the session.
+    LaunchedEffect(LinuxDownloads.changed[distro]) { if (LinuxEnv(ctx, distro).installed) onDone() }
     Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(">_", color = StatusColors.live, fontFamily = Mono, fontSize = 44.sp, fontWeight = FontWeight.Bold)
+        SessionIcon(TermKind.of(distro), size = 56)
         Spacer(Modifier.height(16.dp))
-        Text("A full Linux, in your pocket", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+        Text(distro.label, color = Color.White, style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
-        Text("Alpine Linux with apk, git, python, node and thousands more packages. No root or Termux needed.",
-            color = Color(0xFFAEAEB2), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            when (distro) {
+                dev.droidmcp.Distro.ALPINE -> "A tiny, fast Linux with apk: git, python, node and thousands more packages."
+                dev.droidmcp.Distro.UBUNTU -> "Full Ubuntu with apt. Runs prebuilt Linux software that Alpine can't (official Node, Bun, Python wheels, VS Code server)."
+            } + " No root or Termux needed.",
+            color = Color(0xFFAEAEB2), style = MaterialTheme.typography.bodyMedium,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
         Spacer(Modifier.height(24.dp))
-        if (busy) {
+        if (progress != null) {
             CircularProgressIndicator()
             Spacer(Modifier.height(12.dp))
             Text(progress, color = Color(0xFFAEAEB2), style = MaterialTheme.typography.bodySmall)
+            Text("You can leave this screen; the download keeps going.", color = Color(0xFF6E6E73),
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
         } else {
-            Button(onClick = {
-                busy = true; error = null
-                scope.launch {
-                    val err = withContext(Dispatchers.IO) {
-                        try { linux.setup { p -> scope.launch { progress = p } }; null } catch (e: Exception) { e.message ?: e.toString() }
-                    }
-                    busy = false
-                    if (err == null) onDone() else error = err
-                }
-            }, modifier = Modifier.fillMaxWidth().height(56.dp)) { Text("Set up Linux · 3 MB") }
+            Button(onClick = { LinuxDownloads.start(ctx, distro) }, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                Text(if (error != null) "Try again" else "Download · ${distro.sizeHint}")
+            }
             error?.let { Spacer(Modifier.height(12.dp)); Text(it, color = StatusColors.error, style = MaterialTheme.typography.bodySmall) }
         }
+        if (canCancel) TextButton(onClick = onCancel, modifier = Modifier.padding(top = 8.dp)) { Text("Back to terminal") }
     }
 }
 
@@ -391,6 +410,6 @@ private fun SetupLinux(linux: LinuxEnv, onDone: () -> Unit) {
 private fun EmptyState(onOpen: () -> Unit) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
         Text("No open sessions", color = Color(0xFFAEAEB2))
-        TextButton(onClick = onOpen) { Text("Open Alpine session") }
+        TextButton(onClick = onOpen) { Text("Open a session") }
     }
 }

@@ -365,7 +365,7 @@ object Island {
             "read_file" -> "Read ${s("path")}"
             "write_file" -> "Write ${s("path")}"
             "shell" -> "$ ${s("command")}"
-            "linux_exec" -> "🐧 ${s("command")}"
+            "linux_exec" -> "🐧 ${a.optString("distro").takeIf { it.isNotBlank() }?.let { "$it: " } ?: ""}${s("command")}"
             "linux_setup" -> "Setting up Linux"
             "device_info" -> "Checking the device"
             else -> tool

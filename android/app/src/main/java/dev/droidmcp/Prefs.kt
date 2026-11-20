@@ -84,6 +84,10 @@ object Prefs {
         .putFloat("island_opacity", s.opacity).putBoolean("island_hide_idle", s.hideWhenIdle)
         .apply()
 
+    /** Distro used by linux_exec and new terminals when none is named. */
+    fun defaultDistro(c: Context): Distro = Distro.of(p(c).getString("default_distro", "alpine")) ?: Distro.ALPINE
+    fun setDefaultDistro(c: Context, d: Distro) = p(c).edit().putString("default_distro", d.id).apply()
+
     fun terminalLinux(c: Context) = p(c).getBoolean("term_linux", true)
     fun setTerminalLinux(c: Context, on: Boolean) = p(c).edit().putBoolean("term_linux", on).apply()
 
