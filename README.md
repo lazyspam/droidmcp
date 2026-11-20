@@ -9,6 +9,17 @@
   An <a href="https://modelcontextprotocol.io">MCP</a> server that runs on the phone, with a public URL, a full Linux, and a live terminal you can share with the AI.
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/home.png" width="250" alt="Home: power button, live status and stats">
+  <img src="docs/screenshots/bubble.png" width="250" alt="The activity bubble narrating the AI scrolling a web page">
+  <img src="docs/screenshots/terminal.png" width="250" alt="The shared AI terminal running fastfetch in Alpine">
+</p>
+<p align="center">
+  <img src="docs/screenshots/activity.png" width="250" alt="Activity: every AI action in plain words">
+  <img src="docs/screenshots/detail.png" width="250" alt="Activity details: time, duration, tool, client and result">
+  <img src="docs/screenshots/settings.png" width="250" alt="Settings">
+</p>
+
 ---
 
 ## What it does
