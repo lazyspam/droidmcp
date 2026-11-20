@@ -43,6 +43,8 @@ fun ActivityScreen(state: AppState) {
     val events = state.ui.events
     var filter by rememberSaveable { mutableIntStateOf(0) } // 0 all, 1 errors
     var confirmClear by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<AiEvent?>(null) }
+    detail?.let { EventSheet(it, state) { detail = null } }
     val shown = if (filter == 1) events.filter { it.ok == false } else events
     val todayStart = startOfDay(System.currentTimeMillis())
     val today = events.count { it.time >= todayStart }
@@ -98,7 +100,7 @@ fun ActivityScreen(state: AppState) {
                         Text("${list.size}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                items(list, key = { "${it.time}${it.tool}${it.text.hashCode()}" }) { TimedEventRow(it) }
+                items(list, key = { "${it.time}${it.tool}${it.text.hashCode()}" }) { e -> TimedEventRow(e) { detail = e } }
             }
         }
     }
@@ -114,12 +116,12 @@ fun ActivityScreen(state: AppState) {
 }
 
 @Composable
-private fun TimedEventRow(e: AiEvent) {
+private fun TimedEventRow(e: AiEvent, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(e.time)),
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 10.dp))
-        Column(Modifier.weight(1f)) { EventRow(e) }
+        Column(Modifier.weight(1f)) { EventRow(e, onClick) }
     }
 }
 

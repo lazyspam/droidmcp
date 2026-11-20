@@ -46,6 +46,7 @@ object Island {
     private var screenW = 0
     private var gapPx = 0
     private var appCtx: Context? = null
+    private var overlayType = 0
     private val collapse = Runnable { setState(State.IDLE, "") }
 
     private enum class State { IDLE, BUSY, OK, ERROR }
@@ -132,7 +133,8 @@ object Island {
         screenW = dm.widthPixels
         gapPx = dp(ctx, 8f)
         val size = dp(ctx, when (style.size) { 0 -> 42f; 2 -> 60f; else -> 50f })
-        val alpha = (style.opacity.coerceIn(0.3f, 1f) * 255).toInt()
+        val alpha = 255 // whole-window opacity is applied via LayoutParams.alpha (see applyOpacity)
+        overlayType = type
         val w = ctx.getSystemService(WindowManager::class.java)
 
         // Balloon: its own window that never takes touches.
@@ -178,6 +180,7 @@ object Island {
         w.addView(b, bLp)
         w.addView(bub, uLp)
         wm = w; bubble = bub; ring = r; logo = face; balloon = b; bubbleLp = uLp; balloonLp = bLp
+        applyOpacityNow()
         enableDrag(bub, uLp, w, ctx, size, edge)
         setState(State.IDLE, "")
     }
@@ -249,12 +252,34 @@ object Island {
         } catch (_: Exception) {}
     }
 
+    /** Live opacity change from the settings slider (no rebuild). */
+    fun setOpacity(o: Float) = main.post {
+        style = style.copy(opacity = o)
+        applyOpacityNow()
+    }
+
+    /**
+     * Fades both windows as a whole. Android 12+ drops touches that pass through an app overlay more than
+     * 80% opaque, so pass-through windows drawn as app overlays are capped at 0.8. Accessibility overlays are trusted.
+     */
+    private fun applyOpacityNow() {
+        val o = style.opacity.coerceIn(0.2f, 1f)
+        val cap = if (overlayType == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) 0.8f else 1f
+        val w = wm ?: return
+        balloonLp?.let { lp -> balloon?.let { v -> lp.alpha = minOf(o, cap); try { w.updateViewLayout(v, lp) } catch (_: Exception) {} } }
+        bubbleLp?.let { lp -> bubble?.let { v ->
+            val passThrough = lp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0
+            lp.alpha = if (passThrough) minOf(o, cap) else o
+            try { w.updateViewLayout(v, lp) } catch (_: Exception) {}
+        } }
+    }
+
     /** While the AI acts, let touches pass through the bubble so its taps can never land on it. */
     private fun setTouchable(on: Boolean) {
-        val p = bubbleLp ?: return; val v = bubble ?: return
+        val p = bubbleLp ?: return
         val f = if (on) p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
                 else p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        if (f != p.flags) { p.flags = f; try { wm?.updateViewLayout(v, p) } catch (_: Exception) {} }
+        if (f != p.flags) { p.flags = f; applyOpacityNow() }
     }
 
     private fun setState(s: State, text: String) {
@@ -291,7 +316,7 @@ object Island {
             State.BUSY -> text
         }
         (b.background as GradientDrawable).setColor(
-            if (s == State.ERROR) Color.argb(240, 120, 28, 24) else Color.argb((style.opacity.coerceIn(0.3f, 1f) * 255).toInt(), 44, 44, 46))
+            if (s == State.ERROR) Color.rgb(120, 28, 24) else Color.rgb(44, 44, 46))
         if (showText.isEmpty()) {
             if (b.visibility == View.VISIBLE) {
                 b.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f).setDuration(160).withEndAction { b.visibility = View.GONE }.start()

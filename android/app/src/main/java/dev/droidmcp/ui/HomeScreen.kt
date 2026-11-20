@@ -99,6 +99,8 @@ fun HomeScreen(
     val view = LocalView.current
     val scope = rememberCoroutineScope()
     val p = power(ui)
+    var detail by remember { mutableStateOf<AiEvent?>(null) }
+    detail?.let { EventSheet(it, state) { detail = null } }
 
     fun toggle() {
         view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
@@ -126,7 +128,7 @@ fun HomeScreen(
         item { SetupCard(ui) }
         if (ui.events.isNotEmpty()) {
             item { SectionHeader("Recent", if (ui.events.size > 3) "See all" else null, onSeeActivity) }
-            items(ui.events.take(3), key = { it.time.toString() + it.tool }) { EventRow(it) }
+            items(ui.events.take(3), key = { it.time.toString() + it.tool }) { EventRow(it) { detail = it } }
         }
     }
 }
@@ -368,7 +370,7 @@ private fun SetupCard(ui: UiSnapshot) {
             if (Build.VERSION.SDK_INT >= 30) c.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                 Uri.parse("package:${c.packageName}")))
         },
-        Step("Island", "Show what the AI is doing", ui.overlay || ui.a11y) { c ->
+        Step("Bubble", "Show what the AI is doing", ui.overlay || ui.a11y) { c ->
             c.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${c.packageName}")))
         },
     )
@@ -411,12 +413,14 @@ private fun SetupCard(ui: UiSnapshot) {
 }
 
 @Composable
-fun EventRow(e: AiEvent) {
+fun EventRow(e: AiEvent, onClick: (() -> Unit)? = null) {
     val color = when (e.ok) { true -> StatusColors.live; false -> StatusColors.error; null -> StatusColors.busy }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer).padding(horizontal = 14.dp, vertical = 12.dp),
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(12.dp))

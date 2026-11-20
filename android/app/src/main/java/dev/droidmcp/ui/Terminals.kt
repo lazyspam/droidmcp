@@ -16,9 +16,11 @@ import dev.droidmcp.Mcp
 import dev.droidmcp.Shell
 import java.io.File
 
+enum class TermKind(val label: String) { ALPINE("Alpine"), ANDROID("Android"), TERMUX("Termux") }
+
 /** One terminal tab. */
-class TermTab(val id: Int, val linux: Boolean, val session: TerminalSession) {
-    var title by mutableStateOf(if (linux) "Alpine $id" else "Android $id")
+class TermTab(val id: Int, val kind: TermKind, val session: TerminalSession) {
+    var title by mutableStateOf("${kind.label} $id")
     var exited by mutableStateOf(false)
 }
 
@@ -66,11 +68,23 @@ object Terminals {
         override fun logStackTrace(tag: String?, e: Exception?) { Log.e(Mcp.TAG, "term", e) }
     }
 
-    /** Opens a new session and makes it current. Linux requires [LinuxEnv.installed]. */
-    fun open(ctx: Context, linux: Boolean): TermTab {
+    private const val TERMUX = "com.termux"
+    private const val TERMUX_PREFIX = "/data/data/com.termux/files/usr"
+
+    /** Termux sessions need Termux installed (and set up) plus root, to run as Termux's own user. */
+    fun termuxAvailable(ctx: Context): Boolean = Shell.rootState == true && try {
+        ctx.packageManager.getApplicationInfo(TERMUX, 0); true
+    } catch (_: Exception) { false }
+
+    /** Opens a new session and makes it current. Alpine requires [LinuxEnv.installed]. */
+    fun open(ctx: Context, kind: TermKind): TermTab {
         val id = nextId++
-        val session = if (linux) linuxSession(ctx) else androidSession(ctx)
-        val tab = TermTab(id, linux, session)
+        val session = when (kind) {
+            TermKind.ALPINE -> linuxSession(ctx)
+            TermKind.ANDROID -> androidSession(ctx)
+            TermKind.TERMUX -> termuxSession(ctx)
+        }
+        val tab = TermTab(id, kind, session)
         tabs.add(tab)
         current = tabs.lastIndex
         return tab
@@ -105,6 +119,19 @@ object Terminals {
         return TerminalSession(argv[0], ctx.filesDir.path, argv.toTypedArray(), envList.toTypedArray(), 5000, client(ctx))
     }
 
+    /** Termux's own environment (packages, home, shell), run as Termux's user via su. */
+    private fun termuxSession(ctx: Context): TerminalSession {
+        val uid = ctx.packageManager.getApplicationInfo(TERMUX, 0).uid
+        val home = "/data/data/com.termux/files/home"
+        val p = TERMUX_PREFIX
+        val script = "if [ ! -x $p/bin/login ]; then echo 'Termux is not set up yet: open the Termux app once, then try again.'; exit 1; fi; " +
+            "cd $home && exec env -i HOME=$home PREFIX=$p TMPDIR=$p/tmp PATH=$p/bin LANG=en_US.UTF-8 TERM=xterm-256color " +
+            "LD_PRELOAD=$p/lib/libtermux-exec.so SHELL=$p/bin/login $p/bin/login"
+        val env = arrayOf("PATH=/system/bin:/system/xbin", "TERM=xterm-256color")
+        val su = Shell.suArgv()
+        return TerminalSession("/system/bin/su", "/", (su + listOf(uid.toString(), "-c", script)).toTypedArray(), env, 5000, client(ctx))
+    }
+
     private fun androidSession(ctx: Context): TerminalSession {
         val root = Shell.rootState == true
         val shell = if (root) "/system/bin/su" else "/system/bin/sh"
@@ -114,6 +141,7 @@ object Terminals {
             "HOME=$home", "TERM=xterm-256color", "TMPDIR=${ctx.cacheDir.path}",
             "ANDROID_DATA=/data", "ANDROID_ROOT=/system",
         )
-        return TerminalSession(shell, home, arrayOf(if (root) "su" else "sh"), env, 5000, client(ctx))
+        val argv = if (root) Shell.suArgv().toTypedArray() else arrayOf("sh")
+        return TerminalSession(shell, home, argv, env, 5000, client(ctx))
     }
 }

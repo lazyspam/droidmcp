@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alpine session mark: blue disc with a white mountain ridge (stylised). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#0D597F" android:pathData="M12,1 a11,11 0 1,0 0.001,0 Z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M4,16.5 L9,9 L11.5,12.5 L14,9.5 L20,16.5 Z" />
+    <path android:fillColor="#0D597F" android:pathData="M9,9 L7.6,11.1 L9,10.4 L10.4,11.4 Z" />
+</vector>

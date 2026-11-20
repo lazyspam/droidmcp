@@ -50,6 +50,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -85,20 +86,20 @@ fun TerminalScreen() {
 
     // Open the first session on first visit: Alpine if ready, otherwise wait for setup.
     LaunchedEffect(installed) {
-        if (Terminals.tabs.isEmpty() && installed) Terminals.open(ctx, linux = true)
+        if (Terminals.tabs.isEmpty() && installed) Terminals.open(ctx, TermKind.ALPINE)
     }
 
     Column(Modifier.fillMaxSize().background(TermBg)) {
-        TopBar(onNew = { asLinux ->
-            if (asLinux && !linux.installed) return@TopBar
-            Terminals.open(ctx, asLinux)
+        TopBar(onNew = { kind ->
+            if (kind == TermKind.ALPINE && !linux.installed) return@TopBar
+            Terminals.open(ctx, kind)
         }, linuxReady = installed)
         val tab = Terminals.active
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 tab != null -> TerminalPane(tab)
                 !installed -> SetupLinux(linux) { installed = true }
-                else -> EmptyState { Terminals.open(ctx, true) }
+                else -> EmptyState { Terminals.open(ctx, TermKind.ALPINE) }
             }
         }
         // Shortcuts belong to typing: only show them while the keyboard is up.
@@ -107,7 +108,8 @@ fun TerminalScreen() {
 }
 
 @Composable
-private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
+private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
+    val ctx = LocalContext.current
     var sessionsOpen by remember { mutableStateOf(false) }
     var newOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
@@ -120,8 +122,8 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Pill)
                     .clickable { sessionsOpen = true }.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             ) {
-                Box(Modifier.size(8.dp).clip(CircleShape).background(
-                    if (tab == null) StatusColors.off else if (tab.exited) StatusColors.error else StatusColors.live))
+                if (tab != null) SessionIcon(tab.kind, dimmed = tab.exited, size = 18)
+                else Box(Modifier.size(8.dp).clip(CircleShape).background(StatusColors.off))
                 Spacer(Modifier.width(8.dp))
                 Text(tab?.title ?: "Terminal", color = PillText, fontSize = 14.sp, maxLines = 1)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = PillText, modifier = Modifier.size(20.dp))
@@ -131,7 +133,8 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
                 Terminals.tabs.forEachIndexed { i, t ->
                     DropdownMenuItem(
                         text = { Text(t.title + if (t.exited) "  (ended)" else "") },
-                        leadingIcon = { if (i == Terminals.current) Icon(Icons.Filled.Check, null) else Spacer(Modifier.size(24.dp)) },
+                        leadingIcon = { SessionIcon(t.kind, dimmed = t.exited) },
+                        modifier = if (i == Terminals.current) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier,
                         trailingIcon = { IconButton(onClick = { Terminals.close(t) }) { Icon(Icons.Filled.Close, "Close") } },
                         onClick = { Terminals.current = i; sessionsOpen = false },
                     )
@@ -143,15 +146,24 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
             RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
             DropdownMenu(expanded = newOpen, onDismissRequest = { newOpen = false }) {
                 DropdownMenuItem(
+                    leadingIcon = { SessionIcon(TermKind.ALPINE) },
                     text = { Column { Text("Alpine Linux"); Text("apk, git, python…", style = MaterialTheme.typography.bodySmall) } },
-                    enabled = linuxReady, onClick = { newOpen = false; onNew(true) },
+                    enabled = linuxReady, onClick = { newOpen = false; onNew(TermKind.ALPINE) },
                 )
+                if (Terminals.termuxAvailable(ctx)) {
+                    DropdownMenuItem(
+                        leadingIcon = { SessionIcon(TermKind.TERMUX) },
+                        text = { Column { Text("Termux"); Text("Your Termux packages and home", style = MaterialTheme.typography.bodySmall) } },
+                        onClick = { newOpen = false; onNew(TermKind.TERMUX) },
+                    )
+                }
                 DropdownMenuItem(
+                    leadingIcon = { SessionIcon(TermKind.ANDROID) },
                     text = { Column {
                         Text(if (Shell.rootState == true) "Android root shell" else "Android shell")
                         Text("The phone's own shell", style = MaterialTheme.typography.bodySmall)
                     } },
-                    onClick = { newOpen = false; onNew(false) },
+                    onClick = { newOpen = false; onNew(TermKind.ANDROID) },
                 )
             }
         }
@@ -174,6 +186,17 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
             }
         }
     }
+}
+
+@Composable
+fun SessionIcon(kind: TermKind, dimmed: Boolean = false, size: Int = 24) {
+    val res = when (kind) {
+        TermKind.ALPINE -> dev.droidmcp.R.drawable.ic_session_alpine
+        TermKind.ANDROID -> dev.droidmcp.R.drawable.ic_session_android
+        TermKind.TERMUX -> dev.droidmcp.R.drawable.ic_session_termux
+    }
+    androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(res), kind.label,
+        Modifier.size(size.dp).then(if (dimmed) Modifier.alpha(0.4f) else Modifier))
 }
 
 @Composable

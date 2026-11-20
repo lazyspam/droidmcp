@@ -80,6 +80,9 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             when (method) {
                 "initialize" -> {
                     val asked = params.optString("protocolVersion")
+                    params.optJSONObject("clientInfo")?.let { ci ->
+                        Status.client = listOf(ci.optString("name"), ci.optString("version")).filter { it.isNotBlank() }.joinToString(" ")
+                    }
                     result(id, JSONObject()
                         .put("protocolVersion", if (asked in supportedVersions) asked else supportedVersions.first())
                         .put("capabilities", JSONObject().put("tools", JSONObject().put("listChanged", false)))
@@ -102,14 +105,24 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     Status.current = Island.describe(name, args)
                     ActivityLog.listener?.invoke()
                     var ok = false
+                    var summary = ""
+                    val started = System.currentTimeMillis()
                     try {
                         val r = tools.call(name, args)
                         ok = !r.optBoolean("isError")
+                        summary = summarize(r)
                         result(id, r)
+                    } catch (e: InvalidParams) {
+                        summary = "Invalid arguments: ${e.message}"
+                        throw e
+                    } catch (e: Throwable) {
+                        summary = "Internal error: ${e.message}"
+                        throw e
                     } finally {
                         Island.finish(name, ok)
                         Status.current = null
-                        ActivityLog.event(AiEvent(System.currentTimeMillis(), name, Island.describe(name, args), ok))
+                        ActivityLog.event(AiEvent(started, name, Island.describe(name, args), ok,
+                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, Status.client))
                     }
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))
@@ -128,6 +141,20 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
         }
     }
 
+    /** Text of a tool result for the activity log; images are noted, not stored. */
+    private fun summarize(r: JSONObject): String {
+        val content = r.optJSONArray("content") ?: return ""
+        val parts = ArrayList<String>()
+        for (i in 0 until content.length()) {
+            val c = content.optJSONObject(i) ?: continue
+            when (c.optString("type")) {
+                "text" -> parts += c.optString("text")
+                "image" -> parts += "[image, ${c.optString("data").length * 3 / 4 / 1024} KB]"
+            }
+        }
+        return parts.joinToString("\n")
+    }
+
     private fun result(id: Any, r: JSONObject) = JSONObject().put("jsonrpc", "2.0").put("id", id).put("result", r)
     private fun error(id: Any?, code: Int, message: String) = JSONObject().put("jsonrpc", "2.0")
         .put("id", id ?: JSONObject.NULL)
@@ -143,4 +170,4 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     }
 }
 
-object BuildInfo { const val VERSION = "0.8.0" }
+object BuildInfo { const val VERSION = "0.10.0" }

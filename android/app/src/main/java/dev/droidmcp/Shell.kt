@@ -22,6 +22,16 @@ class RootUnavailable(msg: String) : Exception(msg)
 object Shell {
     private const val MAX_OUTPUT = 32 * 1024 * 1024
 
+    /**
+     * Whether `su --mount-master` works (Magisk, KernelSU, APatch). It gives root the phone-wide view of the
+     * filesystem; plain `su` inherits our app's view, where Android 11+ hides other apps' data.
+     */
+    @Volatile var mountMaster: Boolean? = null
+        private set
+
+    /** The su command to use. */
+    fun suArgv(): List<String> = if (mountMaster == false) listOf("su") else listOf("su", "--mount-master")
+
     /** Last known root state: null = not checked yet. */
     @Volatile var rootState: Boolean? = null
         private set
@@ -56,8 +66,20 @@ object Shell {
     }
 
     fun run(script: String, root: Boolean = true, timeoutSec: Long = 30): ShellResult {
+        val r = runOnce(script, root, timeoutSec)
+        if (root && mountMaster == null) {
+            // First root call tells us whether the flag is understood.
+            val unsupported = r.exitCode != 0 && r.out.isEmpty() &&
+                Regex("(?i)(unrecognized|invalid|unknown|illegal) option|usage:").containsMatchIn(r.stderr)
+            mountMaster = !unsupported
+            if (unsupported) return runOnce(script, root, timeoutSec)
+        }
+        return r
+    }
+
+    private fun runOnce(script: String, root: Boolean, timeoutSec: Long): ShellResult {
         val proc = try {
-            ProcessBuilder(if (root) "su" else "sh").start()
+            ProcessBuilder(if (root) suArgv() else listOf("sh")).start()
         } catch (e: IOException) {
             if (root) {
                 rootState = false

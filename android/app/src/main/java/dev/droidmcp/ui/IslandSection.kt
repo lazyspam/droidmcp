@@ -60,8 +60,6 @@ fun IslandSection(state: AppState) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Island", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 8.dp))
         Text("A chat bubble on the edge of your screen that tells you what your AI is doing, live.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 8.dp))
@@ -70,7 +68,7 @@ fun IslandSection(state: AppState) {
 
         Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 8.dp)) {
-                SwitchRow("Show island", "Visible while the server runs", enabled) {
+                SwitchRow("Show bubble", "Visible while the server runs", enabled) {
                     enabled = it
                     Prefs.setIsland(ctx, it)
                     if (it && dev.droidmcp.Status.running) Island.attach(ctx) else Island.detach()
@@ -89,21 +87,8 @@ fun IslandSection(state: AppState) {
 
         Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
-                Label("Side")
-                val positions = listOf("left" to "Left edge", "right" to "Right edge")
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    positions.forEachIndexed { i, (key, name) ->
-                        SegmentedButton(
-                            selected = (if (style.position == "left") "left" else "right") == key,
-                            onClick = { update(style.copy(position = key, y = -1)) },
-                            shape = SegmentedButtonDefaults.itemShape(i, positions.size),
-                        ) { Text(name) }
-                    }
-                }
-
                 Text("Drag the bubble anywhere on your screen; it snaps to the nearest edge. Tap it to open DroidMCP.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp))
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(16.dp))
                 Label("Size")
                 val sizes = listOf("Small", "Medium", "Large")
@@ -119,8 +104,10 @@ fun IslandSection(state: AppState) {
                 Spacer(Modifier.height(16.dp))
                 Label("Opacity · ${(style.opacity * 100).toInt()}%")
                 Slider(
-                    value = style.opacity, onValueChange = { style = style.copy(opacity = it) },
-                    onValueChangeFinished = { update(style) }, valueRange = 0.4f..1f,
+                    value = style.opacity,
+                    // Live: the real bubble fades as you drag; saved when you let go.
+                    onValueChange = { style = style.copy(opacity = it); Island.setOpacity(it) },
+                    onValueChangeFinished = { Prefs.setIslandStyle(ctx, style) }, valueRange = 0.2f..1f,
                 )
                 SwitchRow("Hide when idle", "Only appears while the AI is acting (you can't drag it while hidden)", style.hideWhenIdle, padded = false) {
                     update(style.copy(hideWhenIdle = it))

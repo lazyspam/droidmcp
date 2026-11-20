@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android robot head (the Android robot is reproduced from work created and shared by Google, CC BY 3.0). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#3DDC84" android:pathData="M3,18 A9,9 0 0 1 21,18 Z" />
+    <path android:strokeColor="#3DDC84" android:strokeWidth="1.4" android:strokeLineCap="round" android:pathData="M7,8.6 L5.4,6 M17,8.6 L18.6,6" />
+    <path android:fillColor="#0F1115" android:pathData="M8.4,13.6 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0 M15.6,13.6 m-1.1,0 a1.1,1.1 0 1,0 2.2,0 a1.1,1.1 0 1,0 -2.2,0" />
+</vector>

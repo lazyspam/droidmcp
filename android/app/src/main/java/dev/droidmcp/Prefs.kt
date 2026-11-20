@@ -101,7 +101,10 @@ object Prefs {
 }
 
 /** One AI action, for the activity feed. */
-data class AiEvent(val time: Long, val tool: String, val text: String, val ok: Boolean?)
+data class AiEvent(
+    val time: Long, val tool: String, val text: String, val ok: Boolean?,
+    val args: String = "", val result: String = "", val ms: Long = 0, val client: String = "",
+)
 
 /**
  * AI activity, kept for 30 days in filesDir/activity.jsonl (one JSON object per line, append-only).
@@ -126,7 +129,8 @@ object ActivityLog {
                 try {
                     val o = org.json.JSONObject(line)
                     val e = AiEvent(o.getLong("t"), o.getString("tool"), o.optString("text"),
-                        if (o.has("ok")) o.getBoolean("ok") else null)
+                        if (o.has("ok")) o.getBoolean("ok") else null,
+                        o.optString("args"), o.optString("result"), o.optLong("ms"), o.optString("client"))
                     if (e.time >= cutoff) kept += e else dropped = true
                 } catch (_: Exception) { dropped = true }
             }
@@ -140,6 +144,7 @@ object ActivityLog {
     }
 
     private fun toLine(e: AiEvent) = org.json.JSONObject().put("t", e.time).put("tool", e.tool).put("text", e.text)
+        .put("args", e.args).put("result", e.result).put("ms", e.ms).put("client", e.client)
         .apply { e.ok?.let { put("ok", it) } }.toString() + "\n"
 
     @Synchronized fun event(e: AiEvent) {
@@ -179,4 +184,6 @@ object Status {
     @Volatile var startedAt: Long = 0
     /** The tool call in progress right now (for the Home "Now" card), or null. */
     @Volatile var current: String? = null
+    /** Name of the last MCP client that connected (from initialize), e.g. "claude-code 2.1". */
+    @Volatile var client: String = ""
 }
