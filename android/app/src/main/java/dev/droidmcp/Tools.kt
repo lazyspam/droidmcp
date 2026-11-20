@@ -434,12 +434,13 @@ class Tools(private val ctx: Context) {
     private fun screenshot(maxWidth: Int): JSONObject {
         if (!root()) {
             val svc = DroidAccessibility.require("Screenshots")
-            val bmp = Island.hiddenDuring { svc.screenshot() }
+            // The bubble stays visible (hiding it on every screenshot made it blink); the reply says where it is.
+            val bmp = svc.screenshot()
             val w = bmp.width; val h = bmp.height
             screenSize = Pair(minOf(w, h), maxOf(w, h))
             return encodeShot(bmp, w, h, maxWidth)
         }
-        val r = Island.hiddenDuring { Shell.run("screencap -p", timeoutSec = 20) }
+        val r = Shell.run("screencap -p", timeoutSec = 20)
         if (r.stdout.isEmpty()) throw ToolError("screencap returned nothing: ${r.stderr.ifBlank { "exit ${r.exitCode}" }.take(500)}")
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(r.stdout, 0, r.stdout.size, bounds)
@@ -468,7 +469,7 @@ class Tools(private val ctx: Context) {
             .put(JSONObject().put("type", "text").put("text",
                 "Screen is ${w}x$h px. Image is ${sw}x$sh; multiply image coordinates by " +
                     "%.3f to get screen coordinates for tap/swipe. ".format(w.toDouble() / sw) +
-                    "A black image usually means the app blocks screenshots (FLAG_SECURE).")))
+                    "A black image usually means the app blocks screenshots (FLAG_SECURE)." + overlayNote())))
             .put("isError", false)
     }
 
@@ -721,6 +722,15 @@ class Tools(private val ctx: Context) {
             tmp.delete()
         }
         return text("Wrote ${bytes.size} bytes to $path")
+    }
+
+    /** Tells the AI where DroidMCP's own bubble is, so it doesn't mistake it for part of the app on screen. */
+    private fun overlayNote(): String {
+        val rects = Island.overlayRects()
+        if (rects.isEmpty()) return ""
+        return " Ignore DroidMCP's own activity bubble at " + rects.joinToString(" and ") {
+            "(${it.left},${it.top})-(${it.right},${it.bottom})"
+        } + " (screen px); touches pass through it while you act."
     }
 
     // --- no-root helpers ---

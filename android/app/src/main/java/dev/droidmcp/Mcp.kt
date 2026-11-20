@@ -189,4 +189,4 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     }
 }
 
-object BuildInfo { const val VERSION = "0.13.1" }
+object BuildInfo { const val VERSION = "0.13.2" }

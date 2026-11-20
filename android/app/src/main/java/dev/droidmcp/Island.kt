@@ -94,17 +94,44 @@ object Island {
     fun start(tool: String, args: JSONObject) {
         val text = describe(tool, args)
         main.post {
+            settle?.let { main.removeCallbacks(it); settle = null }
             active++
             main.removeCallbacks(collapse)
             setState(State.BUSY, text)
         }
     }
 
+    private var settle: Runnable? = null
+
     fun finish(tool: String, ok: Boolean) = main.post {
         active = (active - 1).coerceAtLeast(0)
         if (active > 0) return@post
-        if (ok) setState(State.OK, balloon?.text?.toString()?.removePrefix("✓  ").orEmpty()) else setState(State.ERROR, "$tool failed")
-        main.postDelayed(collapse, if (ok) 1400 else 3500)
+        // Wait a moment before showing "done": AI actions often come back-to-back, and flipping
+        // busy → ✓ → busy within a few hundred ms reads as a blink.
+        settle?.let { main.removeCallbacks(it) }
+        val text = balloon?.text?.toString()?.removePrefix("✓  ").orEmpty()
+        settle = Runnable {
+            settle = null
+            if (active > 0) return@Runnable
+            if (ok) setState(State.OK, text) else setState(State.ERROR, "$tool failed")
+            main.postDelayed(collapse, if (ok) 1400 else 3500)
+        }.also { main.postDelayed(it, if (ok) 350 else 0) }
+    }
+
+    /** Where the bubble (and its balloon, if showing) sit on screen, in pixels, for telling the AI to ignore them. */
+    fun overlayRects(): List<android.graphics.Rect> {
+        val out = ArrayList<android.graphics.Rect>()
+        val latch = CountDownLatch(1)
+        main.post {
+            for (v in listOfNotNull(bubble, balloon)) {
+                if (v.visibility != View.VISIBLE || !v.isAttachedToWindow) continue
+                val loc = IntArray(2).also { v.getLocationOnScreen(it) }
+                out += android.graphics.Rect(loc[0], loc[1], loc[0] + v.width, loc[1] + v.height)
+            }
+            latch.countDown()
+        }
+        latch.await(1, TimeUnit.SECONDS)
+        return out
     }
 
     /** Runs [block] with the island invisible, so screenshots don't include it. */
@@ -268,10 +295,10 @@ object Island {
         val cap = if (overlayType == WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY) 0.8f else 1f
         val w = wm ?: return
         balloonLp?.let { lp -> balloon?.let { v -> lp.alpha = minOf(o, cap); try { w.updateViewLayout(v, lp) } catch (_: Exception) {} } }
+        // Same alpha in every state: switching between the touch-through cap and full opacity on every action blinked.
         bubbleLp?.let { lp -> bubble?.let { v ->
-            val passThrough = lp.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0
-            lp.alpha = if (passThrough) minOf(o, cap) else o
-            try { w.updateViewLayout(v, lp) } catch (_: Exception) {}
+            val a = minOf(o, cap)
+            if (lp.alpha != a) { lp.alpha = a; try { w.updateViewLayout(v, lp) } catch (_: Exception) {} }
         } }
     }
 
@@ -280,7 +307,7 @@ object Island {
         val p = bubbleLp ?: return
         val f = if (on) p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
                 else p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        if (f != p.flags) { p.flags = f; applyOpacityNow() }
+        if (f != p.flags) { p.flags = f; bubble?.let { v -> try { wm?.updateViewLayout(v, p) } catch (_: Exception) {} } }
     }
 
     private fun setState(s: State, text: String) {
@@ -303,8 +330,10 @@ object Island {
             }
         }
         if (s == State.BUSY) {
-            pulse = ObjectAnimator.ofFloat(r, "alpha", 1f, 0.3f).apply {
-                duration = 550; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE; start()
+            // Slow, shallow "breathing" instead of a strobe.
+            pulse = ObjectAnimator.ofFloat(r, "alpha", 1f, 0.55f).apply {
+                duration = 1100; repeatMode = ValueAnimator.REVERSE; repeatCount = ValueAnimator.INFINITE
+                interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start()
             }
         }
         setTouchable(s != State.BUSY)
