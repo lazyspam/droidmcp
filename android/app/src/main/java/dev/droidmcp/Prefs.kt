@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 import java.security.SecureRandom
 
 object Prefs {
-    const val DEFAULT_RELAY = "https://droid.xdtunnel.icu"
+    const val DEFAULT_RELAY = "https://droid.lazyexec.dev"
 
     private fun p(c: Context): SharedPreferences = c.getSharedPreferences("droidmcp", Context.MODE_PRIVATE)
 

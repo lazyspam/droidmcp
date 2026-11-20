@@ -19,3 +19,6 @@ node_modules/
 .idea/
 *.iml
 .DS_Store
+
+# Personal relay deploy config (account ID, domains)
+relay-cloudflare/wrangler.public.jsonc

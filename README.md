@@ -32,7 +32,8 @@ The phone connects *out* to the relay, so it works on mobile data and behind any
 ## Quick start
 
 1. **Install** the APK from [Releases](../../releases).
-2. **Open DroidMCP** and tap the power button.
+2. **Open DroidMCP** and tap the power button. It connects to the free public relay at
+   `droid.lazyexec.dev` with a random device ID, so no account or server is needed.
    - With root, everything works right away.
    - Without root, follow the setup checklist on Home (accessibility, notifications and so on).
 3. **Connect your AI:** tap **Copy MCP config** and paste it into your client. For Claude Code:
@@ -79,7 +80,8 @@ Each tool uses root when it's available and the permission-based path otherwise.
 
 - **Token:** clients send `Authorization: Bearer <token>`. It's on by default, and you can turn it off, at your own risk.
 - **Approve on this phone:** optionally, a new AI client must be allowed on the phone (Allow / Always / Deny) before it can run anything.
-- **The relay can't control your phone.** It only forwards requests; the phone checks the token. HTTPS ends at the relay, though, so its operator could see your traffic. Run your own relay for full privacy.
+- **The relay can't control your phone.** It only forwards requests; the phone checks the token. HTTPS ends at the relay, though, so its operator could see your traffic.
+- **Public relay:** `droid.lazyexec.dev` is open to everyone and rate-limited. Each phone claims its device ID with its own secret. For full privacy, run your own relay (below) and set it in **Settings → Connection**.
 
 See [SECURITY.md](SECURITY.md) for details. Only use DroidMCP on devices you own.
 
