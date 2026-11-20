@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imeAnimationTarget
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
@@ -51,12 +53,11 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         }
     }
 
-    val keyboardUp = WindowInsets.isImeVisible
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            // Terminal with keyboard open: give every pixel to the terminal.
-            if (!(Tab.entries[tab] == Tab.TERMINAL && keyboardUp)) {
+            // The keyboard simply covers the bar; removing it mid-animation made the layout jump.
+            run {
                 NavigationBar {
                     Tab.entries.forEachIndexed { i, t ->
                         NavigationBarItem(
@@ -80,8 +81,10 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         },
     ) { padding ->
         // consumeWindowInsets stops the keyboard inset being added on top of the nav-bar inset (no gap above the keyboard).
+        // Terminal: size to where the keyboard WILL end up, once, instead of every animation frame
+        // (each resize makes the terminal re-flow and signal the shell, which looked jerky).
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
-            .let { if (Tab.entries[tab] == Tab.TERMINAL) it.imePadding() else it }) {
+            .let { if (Tab.entries[tab] == Tab.TERMINAL) it.windowInsetsPadding(WindowInsets.imeAnimationTarget) else it }) {
             when (Tab.entries[tab]) {
                 Tab.HOME -> HomeScreen(state, snackbar, onStart, onStop) { tab = Tab.ACTIVITY.ordinal }
                 Tab.ACTIVITY -> ActivityScreen(state)

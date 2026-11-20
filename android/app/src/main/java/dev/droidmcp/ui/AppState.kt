@@ -41,6 +41,7 @@ data class UiSnapshot(
     val startedAt: Long = 0,
     val now: String? = null,
     val model: String = "",
+    val minute: Long = 0,
 ) {
     val connected get() = running && relay == "connected"
     val connecting get() = running && !connected && publicUrl != null
@@ -50,8 +51,12 @@ class AppState(private val ctx: Context) {
     var ui by mutableStateOf(UiSnapshot())
         private set
 
+    private var eventsVersion = -1L
+    private var cachedEvents: List<AiEvent> = emptyList()
+
     fun refresh() {
         val crashFile = App.crashFile(ctx)
+        if (ActivityLog.version != eventsVersion) { eventsVersion = ActivityLog.version; cachedEvents = ActivityLog.events() }
         ui = UiSnapshot(
             running = Status.running,
             relay = Status.relay,
@@ -62,7 +67,7 @@ class AppState(private val ctx: Context) {
             publicUrl = Prefs.publicUrl(ctx),
             token = Prefs.token(ctx),
             deviceId = Prefs.deviceName(ctx),
-            events = ActivityLog.events(),
+            events = cachedEvents,
             a11y = DroidAccessibility.instance != null,
             notif = NotifListener.enabled(ctx),
             sms = ctx.checkSelfPermission(android.Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
@@ -73,6 +78,7 @@ class AppState(private val ctx: Context) {
             startedAt = Status.startedAt,
             now = Status.current,
             model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
+            minute = System.currentTimeMillis() / 60_000,
         )
     }
 

@@ -66,7 +66,7 @@ fun IslandSection(state: AppState) {
 
         PhonePreview(style, enabled)
 
-        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(vertical = 8.dp)) {
                 SwitchRow("Show bubble", "Visible while the server runs", enabled) {
                     enabled = it
@@ -85,7 +85,7 @@ fun IslandSection(state: AppState) {
             }
         }
 
-        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
                 Text("Drag the bubble anywhere on your screen; it snaps to the nearest edge. Tap it to open DroidMCP.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -126,7 +126,7 @@ private fun PhonePreview(style: Prefs.IslandStyle, enabled: Boolean) {
     val bubble = when (style.size) { 0 -> 34; 2 -> 48; else -> 40 }
     val left = style.position == "left"
     Box(
-        Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(28.dp))
+        Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(Radius.xl))
             .background(Color(0xFF101012)).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

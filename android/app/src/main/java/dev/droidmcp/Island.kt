@@ -47,6 +47,7 @@ object Island {
     private var gapPx = 0
     private var appCtx: Context? = null
     private var overlayType = 0
+    private var hiding = false
     private val collapse = Runnable { setState(State.IDLE, "") }
 
     private enum class State { IDLE, BUSY, OK, ERROR }
@@ -318,13 +319,23 @@ object Island {
         (b.background as GradientDrawable).setColor(
             if (s == State.ERROR) Color.rgb(120, 28, 24) else Color.rgb(44, 44, 46))
         if (showText.isEmpty()) {
-            if (b.visibility == View.VISIBLE) {
-                b.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f).setDuration(160).withEndAction { b.visibility = View.GONE }.start()
+            if (b.visibility == View.VISIBLE && !hiding) {
+                hiding = true
+                b.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f).setDuration(160).withEndAction {
+                    // Only finish hiding if nothing new arrived during the fade.
+                    if (hiding) b.visibility = View.GONE
+                    hiding = false
+                }.start()
             }
         } else {
             b.text = showText
             placeBalloon()
-            if (b.visibility != View.VISIBLE) {
+            if (hiding) {
+                // A new action arrived mid-fade: cancel the fade and snap back to fully shown.
+                hiding = false
+                b.animate().cancel()
+                b.alpha = 1f; b.scaleX = 1f; b.scaleY = 1f; b.visibility = View.VISIBLE
+            } else if (b.visibility != View.VISIBLE) {
                 val left = (bubbleLp?.x ?: 0) < screenW / 2
                 b.pivotX = if (left) 0f else b.measuredWidth.toFloat()
                 b.pivotY = 0f

@@ -34,7 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -66,6 +66,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -118,8 +119,9 @@ fun HomeScreen(
         item { Header(ui) }
         item { PowerHero(p, ui, ::toggle) }
         item {
-            AnimatedVisibility(ui.now != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                NowCard(ui.now ?: "")
+            val now = steadyNow(ui.now)
+            AnimatedVisibility(now != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                NowCard(now ?: lastNow.value)
             }
         }
         if (ui.running) item { Stats(ui) }
@@ -128,9 +130,29 @@ fun HomeScreen(
         item { SetupCard(ui) }
         if (ui.events.isNotEmpty()) {
             item { SectionHeader("Recent", if (ui.events.size > 3) "See all" else null, onSeeActivity) }
-            items(ui.events.take(3), key = { it.time.toString() + it.tool }) { EventRow(it) { detail = it } }
+            itemsIndexed(ui.events.take(3), key = { i, e -> "${e.time}-$i" }) { _, e -> EventRow(e) { detail = e } }
         }
     }
+}
+
+private val lastNow = mutableStateOf("")
+
+/** Debounced "current action": quick actions don't flash the card; once shown it stays at least a second. */
+@Composable
+private fun steadyNow(raw: String?): String? {
+    var shown by remember { mutableStateOf<String?>(null) }
+    var since by remember { mutableStateOf(0L) }
+    androidx.compose.runtime.LaunchedEffect(raw) {
+        if (raw != null) {
+            if (shown == null) kotlinx.coroutines.delay(400)
+            shown = raw; lastNow.value = raw; since = System.currentTimeMillis()
+        } else if (shown != null) {
+            val left = 1000 - (System.currentTimeMillis() - since)
+            if (left > 0) kotlinx.coroutines.delay(left)
+            shown = null
+        }
+    }
+    return shown
 }
 
 @Composable
@@ -169,7 +191,7 @@ private fun PowerHero(p: Power, ui: UiSnapshot, onToggle: () -> Unit) {
         Power.ERROR -> "Problem" to (ui.error ?: "")
     }
     Card(
-        shape = RoundedCornerShape(32.dp),
+        shape = RoundedCornerShape(Radius.xl),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -186,22 +208,13 @@ private fun PowerHero(p: Power, ui: UiSnapshot, onToggle: () -> Unit) {
 
 @Composable
 private fun PowerButton(color: Color, p: Power, onClick: () -> Unit) {
-    val t = rememberInfiniteTransition(label = "hero")
-    val glow by t.animateFloat(0.85f, 1.12f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "glow")
-    val spin by t.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "spin")
     val on = p == Power.LIVE || p == Power.LOCAL
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(168.dp)) {
         // Soft halo while live: calm, "breathing" motion signals it's working without demanding attention.
-        if (on) Box(Modifier.size(150.dp).scale(glow).alpha(0.22f).clip(CircleShape).background(
-            Brush.radialGradient(listOf(color, Color.Transparent))))
-        Canvas(Modifier.size(132.dp).let { if (p == Power.CONNECTING) it.rotate(spin) else it }) {
-            val stroke = 7.dp.toPx()
-            if (p == Power.CONNECTING) {
-                drawArc(color.copy(alpha = 0.25f), 0f, 360f, false, style = Stroke(stroke))
-                drawArc(color, 0f, 90f, false, style = Stroke(stroke, cap = StrokeCap.Round))
-            } else {
-                drawArc(color.copy(alpha = if (on) 1f else 0.35f), 0f, 360f, false, style = Stroke(stroke))
-            }
+        if (on) Halo(color)
+        if (p == Power.CONNECTING) Spinner(color)
+        else Canvas(Modifier.size(132.dp)) {
+            drawArc(color.copy(alpha = if (on) 1f else 0.35f), 0f, 360f, false, style = Stroke(7.dp.toPx()))
         }
         Box(
             Modifier.size(108.dp).clip(CircleShape)
@@ -211,6 +224,26 @@ private fun PowerButton(color: Color, p: Power, onClick: () -> Unit) {
         ) {
             PowerGlyph(if (on || p == Power.CONNECTING) color else MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+}
+
+/** Animated values are read inside graphicsLayer/draw lambdas, so they redraw without recomposing. */
+@Composable
+private fun Halo(color: Color) {
+    val t = rememberInfiniteTransition(label = "halo")
+    val glow = t.animateFloat(0.85f, 1.12f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "glow")
+    Box(Modifier.size(150.dp).graphicsLayer { scaleX = glow.value; scaleY = glow.value; alpha = 0.22f }
+        .clip(CircleShape).background(Brush.radialGradient(listOf(color, Color.Transparent))))
+}
+
+@Composable
+private fun Spinner(color: Color) {
+    val t = rememberInfiniteTransition(label = "spin")
+    val spin = t.animateFloat(0f, 360f, infiniteRepeatable(tween(1100, easing = LinearEasing)), label = "spin")
+    Canvas(Modifier.size(132.dp).graphicsLayer { rotationZ = spin.value }) {
+        val stroke = 7.dp.toPx()
+        drawArc(color.copy(alpha = 0.25f), 0f, 360f, false, style = Stroke(stroke))
+        drawArc(color, 0f, 90f, false, style = Stroke(stroke, cap = StrokeCap.Round))
     }
 }
 
@@ -230,7 +263,7 @@ private fun PowerGlyph(color: Color) {
 @Composable
 private fun NowCard(text: String) {
     Card(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(Radius.large),
         colors = CardDefaults.cardColors(containerColor = StatusColors.busy.copy(alpha = 0.14f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -257,7 +290,7 @@ private fun Stats(ui: UiSnapshot) {
 
 @Composable
 private fun StatTile(label: String, value: String, modifier: Modifier, color: Color? = null) {
-    Column(modifier.clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainer).padding(14.dp)) {
+    Column(modifier.clip(RoundedCornerShape(Radius.large)).background(MaterialTheme.colorScheme.surfaceContainer).padding(14.dp)) {
         Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold,
             color = color ?: MaterialTheme.colorScheme.onSurface, maxLines = 1)
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -300,7 +333,7 @@ private fun ConnectCard(state: AppState) {
     val ui = state.ui
     var more by rememberSaveable { mutableStateOf(false) }
     var reveal by rememberSaveable { mutableStateOf(false) }
-    Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
             Text("Connect your AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(ui.publicUrl ?: "Local network only", fontFamily = Mono, style = MaterialTheme.typography.bodySmall,
@@ -338,7 +371,7 @@ private fun ConnectCard(state: AppState) {
 private fun CopyRow(label: String, value: String, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.medium)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
     ) {
         Column(Modifier.weight(1f)) {
@@ -376,7 +409,7 @@ private fun SetupCard(ui: UiSnapshot) {
     )
     val done = steps.count { it.done }
     if (done == steps.size) return
-    Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+    Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
             Text("Finish setup", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("$done of ${steps.size} done · no root needed",
@@ -389,7 +422,7 @@ private fun SetupCard(ui: UiSnapshot) {
             steps.sortedBy { it.done }.forEach { s ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.medium))
                         .clickable(enabled = !s.done) { s.open(ctx) }.padding(vertical = 10.dp, horizontal = 4.dp),
                 ) {
                     Box(Modifier.size(26.dp).clip(CircleShape)
@@ -417,7 +450,7 @@ fun EventRow(e: AiEvent, onClick: (() -> Unit)? = null) {
     val color = when (e.ok) { true -> StatusColors.live; false -> StatusColors.error; null -> StatusColors.busy }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.medium))
             .background(MaterialTheme.colorScheme.surfaceContainer)
             .let { if (onClick != null) it.clickable(onClick = onClick) else it }
             .padding(horizontal = 14.dp, vertical = 12.dp),
@@ -445,9 +478,9 @@ fun ago(t: Long): String {
 @Composable
 fun PulseDot(color: Color, pulsing: Boolean, size: Int = 18) {
     val t = rememberInfiniteTransition(label = "pulse")
-    val s by t.animateFloat(1f, if (pulsing) 1.35f else 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "s")
+    val s = t.animateFloat(1f, if (pulsing) 1.35f else 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "s")
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size((size * 1.6).dp)) {
-        Box(Modifier.size(size.dp).scale(s).alpha(0.35f).clip(CircleShape).background(color))
+        Box(Modifier.size(size.dp).graphicsLayer { scaleX = s.value; scaleY = s.value; alpha = 0.35f }.clip(CircleShape).background(color))
         Box(Modifier.size((size * 0.62).dp).clip(CircleShape).background(color))
     }
 }
@@ -456,7 +489,7 @@ fun PulseDot(color: Color, pulsing: Boolean, size: Int = 18) {
 private fun CrashCard(text: String) {
     val ctx = LocalContext.current
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-        shape = RoundedCornerShape(20.dp), modifier = Modifier.fillMaxWidth()) {
+        shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("The app crashed last time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

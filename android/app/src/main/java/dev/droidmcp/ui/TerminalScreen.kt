@@ -7,6 +7,8 @@ import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,7 +79,7 @@ private object Mods {
     var alt by mutableStateOf(false)
 }
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun TerminalScreen() {
     val ctx = LocalContext.current
@@ -102,25 +104,30 @@ fun TerminalScreen() {
                 else -> EmptyState { Terminals.open(ctx, TermKind.ALPINE) }
             }
         }
-        // Shortcuts belong to typing: only show them while the keyboard is up.
-        if (tab != null && WindowInsets.isImeVisible) ExtraKeys(tab.session)
+        // Shortcuts belong to typing: shown as soon as the keyboard starts opening, in the same single resize.
+        val keyboardComing = WindowInsets.imeAnimationTarget.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
+        if (tab != null && keyboardComing) ExtraKeys(tab.session)
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
     val ctx = LocalContext.current
     var sessionsOpen by remember { mutableStateOf(false) }
     var newOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf<TermTab?>(null) }
     val tab = Terminals.active
+    renaming?.let { t -> RenameDialog(t) { renaming = null } }
     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         // Session switcher pill.
         Box {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Pill)
-                    .clickable { sessionsOpen = true }.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                    .combinedClickable(onClick = { sessionsOpen = true }, onLongClick = { renaming = tab })
+                    .padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             ) {
                 if (tab != null) SessionIcon(tab.kind, dimmed = tab.exited, size = 18)
                 else Box(Modifier.size(8.dp).clip(CircleShape).background(StatusColors.off))
@@ -128,13 +135,14 @@ private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
                 Text(tab?.title ?: "Terminal", color = PillText, fontSize = 14.sp, maxLines = 1)
                 Icon(Icons.Filled.ArrowDropDown, null, tint = PillText, modifier = Modifier.size(20.dp))
             }
-            DropdownMenu(expanded = sessionsOpen, onDismissRequest = { sessionsOpen = false }) {
-                if (Terminals.tabs.isEmpty()) DropdownMenuItem(text = { Text("No sessions") }, onClick = {}, enabled = false)
+            AppMenu(expanded = sessionsOpen, onDismiss = { sessionsOpen = false }) {
+                if (Terminals.tabs.isEmpty()) AppMenuItem(text = { Text("No sessions") }, onClick = {}, enabled = false)
                 Terminals.tabs.forEachIndexed { i, t ->
-                    DropdownMenuItem(
+                    AppMenuItem(
                         text = { Text(t.title + if (t.exited) "  (ended)" else "") },
                         leadingIcon = { SessionIcon(t.kind, dimmed = t.exited) },
-                        modifier = if (i == Terminals.current) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier,
+                        modifier = if (i == Terminals.current) Modifier.padding(horizontal = 6.dp)
+                            .clip(RoundedCornerShape(Radius.small)).background(MaterialTheme.colorScheme.secondaryContainer) else Modifier,
                         trailingIcon = { IconButton(onClick = { Terminals.close(t) }) { Icon(Icons.Filled.Close, "Close") } },
                         onClick = { Terminals.current = i; sessionsOpen = false },
                     )
@@ -144,20 +152,20 @@ private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
         Spacer(Modifier.weight(1f))
         Box {
             RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
-            DropdownMenu(expanded = newOpen, onDismissRequest = { newOpen = false }) {
-                DropdownMenuItem(
+            AppMenu(expanded = newOpen, onDismiss = { newOpen = false }) {
+                AppMenuItem(
                     leadingIcon = { SessionIcon(TermKind.ALPINE) },
                     text = { Column { Text("Alpine Linux"); Text("apk, git, python…", style = MaterialTheme.typography.bodySmall) } },
                     enabled = linuxReady, onClick = { newOpen = false; onNew(TermKind.ALPINE) },
                 )
                 if (Terminals.termuxAvailable(ctx)) {
-                    DropdownMenuItem(
+                    AppMenuItem(
                         leadingIcon = { SessionIcon(TermKind.TERMUX) },
                         text = { Column { Text("Termux"); Text("Your Termux packages and home", style = MaterialTheme.typography.bodySmall) } },
                         onClick = { newOpen = false; onNew(TermKind.TERMUX) },
                     )
                 }
-                DropdownMenuItem(
+                AppMenuItem(
                     leadingIcon = { SessionIcon(TermKind.ANDROID) },
                     text = { Column {
                         Text(if (Shell.rootState == true) "Android root shell" else "Android shell")
@@ -170,22 +178,48 @@ private fun TopBar(onNew: (TermKind) -> Unit, linuxReady: Boolean) {
         Spacer(Modifier.width(8.dp))
         Box {
             RoundIcon(onClick = { moreOpen = true }) { Icon(Icons.Filled.MoreVert, "More", tint = PillText, modifier = Modifier.size(20.dp)) }
-            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                DropdownMenuItem(text = { Text("Paste") }, enabled = tab != null, onClick = {
+            AppMenu(expanded = moreOpen, onDismiss = { moreOpen = false }) {
+                AppMenuItem(text = { Text("Rename session") }, enabled = tab != null, onClick = {
+                    moreOpen = false; renaming = tab
+                })
+                AppMenuItem(text = { Text("Paste") }, enabled = tab != null, onClick = {
                     moreOpen = false; tab?.session?.onPasteTextFromClipboard()
                 })
-                DropdownMenuItem(text = { Text("Clear screen") }, enabled = tab != null, onClick = {
+                AppMenuItem(text = { Text("Clear screen") }, enabled = tab != null, onClick = {
                     moreOpen = false; tab?.session?.write("clear\n")
                 })
-                DropdownMenuItem(text = { Text("Bigger text") }, onClick = { moreOpen = false; TermFont.change(+2) })
-                DropdownMenuItem(text = { Text("Smaller text") }, onClick = { moreOpen = false; TermFont.change(-2) })
+                AppMenuItem(text = { Text("Bigger text") }, onClick = { moreOpen = false; TermFont.change(+2) })
+                AppMenuItem(text = { Text("Smaller text") }, onClick = { moreOpen = false; TermFont.change(-2) })
                 HorizontalDivider()
-                DropdownMenuItem(text = { Text("Close session") }, enabled = tab != null, onClick = {
+                AppMenuItem(text = { Text("Close session") }, enabled = tab != null, onClick = {
                     moreOpen = false; tab?.let { Terminals.close(it) }
                 })
             }
         }
     }
+}
+
+@Composable
+private fun RenameDialog(tab: TermTab, onDone: () -> Unit) {
+    var name by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(tab.title,
+        androidx.compose.ui.text.TextRange(0, tab.title.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { onDone(); Terminals.refocus() },
+        title = { Text("Rename session") },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                name, { name = it }, singleLine = true, placeholder = { Text("${tab.kind.label} ${tab.id}") },
+                supportingText = { Text("Leave empty to use the default name") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { tab.rename(name.text); onDone() }),
+                modifier = Modifier.focusRequester(focus),
+            )
+            LaunchedEffect(Unit) { focus.requestFocus() }
+        },
+        confirmButton = { TextButton(onClick = { tab.rename(name.text); onDone(); Terminals.refocus() }) { Text("Save") } },
+        dismissButton = { TextButton(onClick = { onDone(); Terminals.refocus() }) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -226,13 +260,19 @@ private fun TerminalPane(tab: TermTab) {
                 isFocusable = true
                 isFocusableInTouchMode = true
                 Terminals.onScreenUpdate = { post { onScreenUpdated() } }
+                Terminals.view = java.lang.ref.WeakReference(this)
+                requestFocus()
             }
+        },
+        onRelease = { v ->
+            // Screen went away: stop sessions from redrawing (and referencing) the old view.
+            if (Terminals.onScreenUpdate != null) Terminals.onScreenUpdate = null
         },
         update = { v ->
             val px = (TermFont.sp * density).toInt()
             if (v.tag != px) { v.setTextSize(px); v.tag = px }
-            if (v.currentSession !== tab.session) v.attachSession(tab.session)
-            v.requestFocus()
+            // Only grab focus when switching sessions, not on every recomposition.
+            if (v.currentSession !== tab.session) { v.attachSession(tab.session); v.requestFocus() }
         },
     )
 }
@@ -247,7 +287,9 @@ private class ViewClient(private val view: TerminalView, private val ctx: Contex
     }
     override fun onSingleTapUp(e: MotionEvent?) {
         view.requestFocus()
-        ctx.getSystemService(InputMethodManager::class.java).showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+        // The insets controller is the reliable way to show the keyboard on Android 11+.
+        if (android.os.Build.VERSION.SDK_INT >= 30) view.windowInsetsController?.show(android.view.WindowInsets.Type.ime())
+        else ctx.getSystemService(InputMethodManager::class.java).showSoftInput(view, 0)
     }
     override fun shouldBackButtonBeMappedToEscape() = false
     override fun shouldEnforceCharBasedInput() = true
@@ -301,9 +343,10 @@ private fun ExtraKeys(session: TerminalSession) {
 @Composable
 private fun Key(label: String, active: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.height(34.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.height(34.dp).clip(RoundedCornerShape(Radius.small))
             .background(if (active) MaterialTheme.colorScheme.primary else Pill)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp),
+            // Keep the keyboard attached to the terminal after a key tap.
+            .clickable { onClick(); Terminals.refocus() }.padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(label, color = if (active) MaterialTheme.colorScheme.onPrimary else PillText, fontSize = 13.sp)

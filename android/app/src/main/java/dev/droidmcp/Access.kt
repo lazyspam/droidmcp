@@ -38,6 +38,8 @@ class DroidAccessibility : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        // The bubble's window belonged to this service and is gone now: rebuild it as a normal overlay.
+        if (Status.running) Island.reattach(applicationContext)
         ActivityLog.listener?.invoke()
         return super.onUnbind(intent)
     }

@@ -52,6 +52,10 @@ object Prefs {
     fun localPort(c: Context) = p(c).getInt("local_port", 8765)
     fun allowShell(c: Context) = p(c).getBoolean("allow_shell", true)
     fun autostart(c: Context) = p(c).getBoolean("autostart", false)
+    /** User hid the server notification (root: snoozed indefinitely while the server keeps running). */
+    fun notifHidden(c: Context) = p(c).getBoolean("notif_hidden", false)
+    fun setNotifHidden(c: Context, on: Boolean) = p(c).edit().putBoolean("notif_hidden", on).apply()
+
     fun island(c: Context) = p(c).getBoolean("island", true)
     fun setIsland(c: Context, on: Boolean) = p(c).edit().putBoolean("island", on).apply()
 
@@ -112,7 +116,12 @@ data class AiEvent(
  */
 object ActivityLog {
     private const val KEEP_MS = 30L * 24 * 60 * 60 * 1000
-    private const val MAX_IN_MEMORY = 20_000
+    private const val MAX_IN_MEMORY = 5_000
+    private const val MAX_ARGS = 1_500
+    private const val MAX_RESULT = 3_000
+    /** Bumped on every change, so the UI copies the list only when something actually changed. */
+    @Volatile var version = 0L
+        private set
     private val events = ArrayDeque<AiEvent>()
     private var file: java.io.File? = null
 
@@ -147,7 +156,9 @@ object ActivityLog {
         .put("args", e.args).put("result", e.result).put("ms", e.ms).put("client", e.client)
         .apply { e.ok?.let { put("ok", it) } }.toString() + "\n"
 
-    @Synchronized fun event(e: AiEvent) {
+    @Synchronized fun event(full: AiEvent) {
+        val e = full.copy(args = full.args.take(MAX_ARGS), result = full.result.take(MAX_RESULT))
+        version++
         events.addFirst(e)
         while (events.size > MAX_IN_MEMORY) events.removeLast()
         try { file?.appendText(toLine(e)) } catch (_: Exception) {}
@@ -157,6 +168,7 @@ object ActivityLog {
     @Synchronized fun events(): List<AiEvent> = events.toList()
 
     @Synchronized fun clear() {
+        version++
         events.clear()
         try { file?.delete() } catch (_: Exception) {}
         listener?.invoke()

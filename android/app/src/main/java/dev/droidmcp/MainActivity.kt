@@ -6,7 +6,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import dev.droidmcp.ui.AppState
 import dev.droidmcp.ui.DroidApp
 import dev.droidmcp.ui.DroidTheme
@@ -27,21 +29,24 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
-        // Keep the screens in sync with the service (status, permissions, activity).
+        // Keep the screens in sync with the service, but only while the app is visible.
         lifecycleScope.launch {
-            while (true) { state.refresh(); delay(1000) }
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) { state.refresh(); delay(1000) }
+            }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        ActivityLog.listener = { runOnUiThread { state.refresh() } }
+    // onStart/onStop (not resume/pause) so split-screen and picture-in-picture keep updating.
+    override fun onStart() {
+        super.onStart()
+        ActivityLog.listener = { runOnUiThread { if (!isDestroyed) state.refresh() } }
         state.refresh()
     }
 
-    override fun onPause() {
+    override fun onStop() {
         ActivityLog.listener = null
-        super.onPause()
+        super.onStop()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {

@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.iputobject.droidmcp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.10.0"
+        versionCode = 24
+        versionName = "0.10.6"
     }
 
     // proot ships as lib*.so: it must be extracted to nativeLibraryDir, the only place apps may execute files from.
@@ -44,7 +44,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 drops unused code (most of the icon set, unused library code): much smaller APK.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
@@ -56,6 +59,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core:1.7.8")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("com.github.termux.termux-app:terminal-view:v0.118.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

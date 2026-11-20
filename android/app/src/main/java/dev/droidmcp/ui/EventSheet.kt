@@ -55,7 +55,7 @@ fun EventSheet(e: AiEvent, state: AppState, onDismiss: () -> Unit) {
                 color = color, style = MaterialTheme.typography.labelLarge,
             )
             // Facts as a compact grid.
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.medium)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
                 .padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Fact("When", SimpleDateFormat("EEE d MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date(e.time)))
                 Fact("Duration", duration(e.ms))
@@ -91,7 +91,7 @@ private fun Block(title: String, body: String, onCopy: () -> Unit) {
         SelectionContainer {
             Text(
                 body, fontFamily = Mono, fontSize = 12.sp, lineHeight = 17.sp,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(RoundedCornerShape(14.dp))
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(RoundedCornerShape(Radius.medium))
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     .verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()).padding(12.dp),
             )

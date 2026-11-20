@@ -22,6 +22,13 @@ enum class TermKind(val label: String) { ALPINE("Alpine"), ANDROID("Android"), T
 class TermTab(val id: Int, val kind: TermKind, val session: TerminalSession) {
     var title by mutableStateOf("${kind.label} $id")
     var exited by mutableStateOf(false)
+    /** Set when the user named the session; programs' window titles then no longer overwrite it. */
+    var renamed = false
+
+    fun rename(name: String) {
+        val n = name.trim()
+        if (n.isEmpty()) { renamed = false; title = "${kind.label} $id" } else { renamed = true; title = n.take(40) }
+    }
 }
 
 /**
@@ -36,12 +43,20 @@ object Terminals {
     /** The TerminalView currently showing a session; it gets redrawn when output arrives. */
     var onScreenUpdate: (() -> Unit)? = null
 
+    /** The visible terminal view (weak, so a destroyed screen is never kept alive). */
+    var view: java.lang.ref.WeakReference<android.view.View>? = null
+
+    /** Give the keyboard back to the terminal (e.g. after tapping a shortcut key). */
+    fun refocus() { view?.get()?.let { if (!it.hasFocus()) it.requestFocus() } }
+
     val active: TermTab? get() = tabs.getOrNull(current)
 
-    private fun client(ctx: Context) = object : TerminalSessionClient {
+    private fun client(activityCtx: Context) = object : TerminalSessionClient {
+        // Sessions outlive the screen (rotation, theme change); hold the app context, never the Activity.
+        private val ctx = activityCtx.applicationContext
         override fun onTextChanged(s: TerminalSession) { onScreenUpdate?.invoke() }
         override fun onTitleChanged(s: TerminalSession) {
-            tabs.firstOrNull { it.session === s }?.let { t -> s.title?.takeIf { it.isNotBlank() }?.let { t.title = it } }
+            tabs.firstOrNull { it.session === s }?.takeIf { !it.renamed }?.let { t -> s.title?.takeIf { it.isNotBlank() }?.let { t.title = it } }
         }
         override fun onSessionFinished(s: TerminalSession) {
             tabs.firstOrNull { it.session === s }?.exited = true

@@ -20,7 +20,7 @@ class LogoView(ctx: Context) : View(ctx) {
     enum class Mood { IDLE, BUSY, OK, ERROR }
 
     var mood = Mood.IDLE
-        set(v) { field = v; onMood(); invalidate() }
+        set(v) { if (field == v) return; field = v; onMood(); invalidate() }
     var tipColor = Color.parseColor("#34C759")
         set(v) { field = v; invalidate() }
 

@@ -27,6 +27,10 @@ class McpService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_HIDE) {
+            setNotificationHidden(this, true)
+            return START_STICKY
+        }
         try {
             startForegroundCompat()
         } catch (e: Exception) {
@@ -105,6 +109,8 @@ class McpService : Service() {
             Status.relay = "not configured"
         }
         ActivityLog.add("service started")
+        // Re-apply "hidden" after restarts and updates (snoozes don't survive the notification being re-posted).
+        if (Prefs.notifHidden(this)) main.postDelayed({ setNotificationHidden(this, true) }, 1500)
         Island.attach(this)
     }
 
@@ -129,13 +135,23 @@ class McpService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1,
             Intent(this, McpService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
+        // Root: hide right here. No root: Android's own notification settings for this channel.
+        val hide = if (Shell.rootState == true) {
+            PendingIntent.getService(this, 2, Intent(this, McpService::class.java).setAction(ACTION_HIDE), PendingIntent.FLAG_IMMUTABLE)
+        } else {
+            PendingIntent.getActivity(this, 3, Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, CHANNEL), PendingIntent.FLAG_IMMUTABLE)
+        }
         val n = Notification.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_manage)
+            .setSmallIcon(R.drawable.ic_stat_droid)
             .setContentTitle("Remote control is ON")
             .setContentText("MCP clients with your token can control this phone.")
             .setContentIntent(open)
+            .addAction(Notification.Action.Builder(null, "Hide", hide).build())
             .addAction(Notification.Action.Builder(null, "Stop", stop).build())
-            .setOngoing(true)
+            // Swipe it away if you don't want it; the server keeps running.
+            .setOngoing(false)
             .build()
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -146,7 +162,28 @@ class McpService : Service() {
 
     companion object {
         const val CHANNEL = "server"
+
         const val ACTION_STOP = "dev.droidmcp.STOP"
+        const val ACTION_HIDE = "dev.droidmcp.HIDE"
+        private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+        /**
+         * Hides or shows the server notification without stopping the server. Android forces foreground-service
+         * notifications to be non-dismissible, so with root we snooze it (for years) and unsnooze to show it again.
+         * Returns false when root isn't available.
+         */
+        fun setNotificationHidden(c: Context, hidden: Boolean): Boolean {
+            Prefs.setNotifHidden(c, hidden)
+            if (Shell.rootState != true) return false
+            val uid = c.applicationInfo.uid
+            val key = "${uid / 100000}|${c.packageName}|1|null|$uid"
+            Thread {
+                runCatching {
+                    Shell.run(if (hidden) "cmd notification snooze --for 315360000000 '$key'" else "cmd notification unsnooze '$key'")
+                }
+            }.start()
+            return true
+        }
 
         /** Returns an error message, or null on success. */
         fun start(c: Context): String? = try {

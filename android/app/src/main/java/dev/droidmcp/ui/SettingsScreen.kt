@@ -32,12 +32,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -113,46 +115,48 @@ private fun SettingsHome(state: AppState, open: (Page) -> Unit) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 6.dp))
         Group {
-            CategoryRow({ IconTile(Icons.Filled.Share, Color(0xFF0A84FF)) }, "Connection",
+            CategoryRow({ IconTile(Icons.Outlined.Link) }, "Connection",
                 (if (ui.connected) "Connected" else if (ui.running) "Not connected" else "Off") + " · ${ui.deviceId}") { open(Page.CONNECTION) }
             Divider()
-            CategoryRow({ LogoTile() }, "Bubble",
+            CategoryRow({ IconTile(Icons.Outlined.ChatBubbleOutline) }, "Bubble",
                 if (!Prefs.island(ctx)) "Off" else "${if (island.position == "left") "Left" else "Right"} edge · ${(island.opacity * 100).toInt()}%") { open(Page.ISLAND) }
         }
         Group {
-            CategoryRow({ IconTile(Icons.Filled.Lock, Color(0xFFFF9F0A)) }, "Security",
+            CategoryRow({ IconTile(Icons.Outlined.Shield) }, "Security",
                 if (Prefs.allowShell(ctx)) "Shell allowed · token" else "Shell off · token") { open(Page.SECURITY) }
             Divider()
-            CategoryRow({ IconTile(Icons.Filled.CheckCircle, Color(0xFF34C759)) }, "Permissions",
+            CategoryRow({ IconTile(Icons.Outlined.Key) }, "Permissions",
                 if (ui.root) "Root: everything allowed" else if (missing == 0) "All allowed" else "$missing to allow") { open(Page.PERMISSIONS) }
         }
         Group {
-            CategoryRow({ IconTile(Icons.Filled.Settings, Color(0xFF8E8E93)) }, "General",
+            CategoryRow({ IconTile(Icons.Outlined.Tune) }, "General",
                 if (Prefs.autostart(ctx)) "Starts on boot" else "Manual start") { open(Page.GENERAL) }
             Divider()
-            CategoryRow({ IconTile(Icons.Filled.Info, Color(0xFF5E5CE6)) }, "About", "Version ${state.version}") { open(Page.ABOUT) }
+            CategoryRow({ IconTile(Icons.Outlined.Info) }, "About", "Version ${state.version}") { open(Page.ABOUT) }
         }
     }
 }
 
 @Composable
 private fun Group(content: @Composable () -> Unit) {
-    Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(vertical = 6.dp)) { content() } }
+    Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(vertical = 6.dp)) { content() } }
 }
 
 @Composable
 private fun Divider() = HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+/** Tonal tile: colours come from the theme (and the user's wallpaper), so every icon sits in one calm family. */
 @Composable
-private fun IconTile(icon: ImageVector, color: Color) {
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(color), contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = Color.White, modifier = Modifier.size(22.dp))
+private fun IconTile(icon: ImageVector) {
+    Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radius.small)).background(MaterialTheme.colorScheme.secondaryContainer),
+        contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(22.dp))
     }
 }
 
 @Composable
 private fun LogoTile() {
-    Box(Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF14161C)), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(40.dp).clip(RoundedCornerShape(Radius.small)).background(Color(0xFF14161C)), contentAlignment = Alignment.Center) {
         Image(painterResource(R.drawable.ic_logo_mark), null, Modifier.size(40.dp))
     }
 }
@@ -195,7 +199,7 @@ private fun Section(title: String?, content: @Composable () -> Unit) {
     Column {
         if (title != null) Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
-        Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+        Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
         }
     }
@@ -327,11 +331,21 @@ private fun PermissionsPage(state: AppState) {
 private fun GeneralPage() {
     val ctx = LocalContext.current
     var boot by remember { mutableStateOf(Prefs.autostart(ctx)) }
+    var shown by remember { mutableStateOf(!Prefs.notifHidden(ctx)) }
     Section(null) {
         SwitchRow("Start on boot", "Starts the server when the phone turns on", boot, padded = false) {
             boot = it
             Prefs.save(ctx, Prefs.relayUrl(ctx), Prefs.agentKey(ctx), Prefs.deviceName(ctx), Prefs.localEnabled(ctx),
                 Prefs.localPort(ctx), Prefs.allowShell(ctx), it)
+        }
+        HorizontalDivider()
+        SwitchRow("Show notification", "You can also tap Hide on the notification. The server keeps running.", shown, padded = false) { on ->
+            shown = on
+            if (!dev.droidmcp.McpService.setNotificationHidden(ctx, !on)) {
+                ctx.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, dev.droidmcp.McpService.CHANNEL))
+            }
         }
     }
 }
@@ -349,9 +363,44 @@ private fun AboutPage(state: AppState) {
     Section(null) {
         Text("Lets AI agents use this phone over MCP: screen, input, apps, messages, files, a root shell and a full Alpine Linux.",
             style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.height(6.dp))
-        Text("MIT licensed. Bundles PRoot (GPL-2.0), talloc (LGPL-3.0) and Termux's terminal emulator (Apache-2.0). Android robot © Google, CC BY 3.0.",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Section("DroidMCP on GitHub") {
+        LinkRow("Source code", "github.com/iput-object/droidmcp", "https://github.com/iput-object/droidmcp")
+        HorizontalDivider()
+        LinkRow("Releases", "Download the latest APK", "https://github.com/iput-object/droidmcp/releases")
+        HorizontalDivider()
+        LinkRow("Report a problem", "Open an issue", "https://github.com/iput-object/droidmcp/issues")
+        HorizontalDivider()
+        LinkRow("License", "MIT", "https://github.com/iput-object/droidmcp/blob/main/LICENSE")
+    }
+    Section("Built with") {
+        LinkRow("Model Context Protocol", "The protocol AI clients speak", "https://modelcontextprotocol.io")
+        HorizontalDivider()
+        LinkRow("Termux terminal emulator", "termux/termux-app · Apache-2.0", "https://github.com/termux/termux-app")
+        HorizontalDivider()
+        LinkRow("PRoot", "termux/proot · GPL-2.0", "https://github.com/termux/proot")
+        HorizontalDivider()
+        LinkRow("talloc", "Samba · LGPL-3.0", "https://talloc.samba.org")
+        HorizontalDivider()
+        LinkRow("Alpine Linux", "Downloaded on first use", "https://alpinelinux.org")
+    }
+    Text("Android robot © Google, used under CC BY 3.0.", style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+}
+
+@Composable
+private fun LinkRow(title: String, subtitle: String, url: String) {
+    val ctx = LocalContext.current
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.small))
+            .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }.padding(vertical = 10.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
     }
 }
 
