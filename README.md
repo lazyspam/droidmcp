@@ -1,107 +1,117 @@
-# DroidMCP
+<p align="center">
+  <img src="docs/logo.svg" width="96" alt="DroidMCP logo">
+</p>
 
-Let an AI agent use your **rooted Android phone**. DroidMCP runs an [MCP](https://modelcontextprotocol.io) server on the
-phone and gives it a public HTTPS URL, so Claude, Cursor or any other MCP client can see the screen, tap, type, open
-apps, read notifications and SMS, manage files and run root shell commands, from anywhere.
+<h1 align="center">DroidMCP</h1>
+
+<p align="center">
+  Let an AI agent use your Android phone, from anywhere.<br>
+  An <a href="https://modelcontextprotocol.io">MCP</a> server that runs on the phone, with a public URL, a full Linux, and a live terminal you can share with the AI.
+</p>
+
+---
+
+## What it does
+
+Connect Claude Code, Claude Desktop, Cursor or any other MCP client, and the AI can:
+
+- **See and use the screen:** take screenshots, read the on-screen elements, tap, swipe, type and press keys.
+- **Use the phone:** open apps and links, read notifications, read and send SMS, and read and write files.
+- **Work in Linux:** Alpine or Ubuntu run inside the app, so the AI can use `apk`/`apt`, git, Python, Node and more. No root or Termux is needed.
+- **Share a terminal with you:** the AI's commands run in a visible session you can watch, type into, answer prompts in, or stop.
+
+You always see what it's doing: a chat-bubble overlay shows each action live, and the **Activity** tab keeps 30 days of history with full details.
 
 ```
-MCP client ──HTTPS──▶ relay ◀──WebSocket── DroidMCP app (rooted phone)
+MCP client ──HTTPS──▶ relay ◀──WebSocket── DroidMCP (your phone)
                       /d/<device-id>/mcp
 ```
 
-The phone always connects *out* to the relay, so it works on mobile data, behind CGNAT, with no port forwarding.
+The phone connects *out* to the relay, so it works on mobile data and behind any router, with no port forwarding.
 
-> ⚠️ Anyone with your URL **and** client token has root on your phone. Read [SECURITY.md](SECURITY.md).
+## Quick start
+
+1. **Install** the APK from [Releases](../../releases).
+2. **Open DroidMCP** and tap the power button.
+   - With root, everything works right away.
+   - Without root, follow the setup checklist on Home (accessibility, notifications and so on).
+3. **Connect your AI:** tap **Copy MCP config** and paste it into your client. For Claude Code:
+
+   ```bash
+   claude mcp add --transport http android https://<relay>/d/<device-id>/mcp \
+     --header "Authorization: Bearer <token>"
+   ```
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `screenshot` | Screen as a JPEG, with the scale factor for converting to tap coordinates |
-| `ui_tree` | Every on-screen element: text, id, flags and tap center |
-| `tap`, `long_press`, `swipe`, `type_text`, `key` | Input. `type_text` handles any language and emoji |
-| `launch_app`, `list_apps`, `open_url` | Apps, intents, deep links |
-| `notifications` | Current notifications |
-| `sms_list`, `send_sms` | Read SMS; send and wait for delivery confirmation |
-| `read_file`, `write_file` | Any file (root) |
-| `device_info` | Model, Android version, battery, screen, IPs, storage, root status |
-| `shell` | Root shell for everything else (`svc wifi enable`, `pm install`, `settings put`, `am start`, `reboot`, …). Can be turned off |
+| `screenshot`, `ui_tree` | See the screen: an image, or every element with tap coordinates |
+| `tap`, `long_press`, `swipe`, `type_text`, `key` | Touch and keyboard input |
+| `launch_app`, `list_apps`, `open_url` | Apps, intents and deep links |
+| `notifications`, `sms_list`, `send_sms` | Notifications and messages |
+| `read_file`, `write_file` | Files (any path with root, shared storage without) |
+| `linux_exec`, `linux_setup` | Run commands in Alpine or Ubuntu (`distro`), in the shared AI terminal by default |
+| `terminal_read`, `terminal_input` | Read a terminal screen; type into it (answer prompts, Ctrl+C) |
+| `shell` | The phone's own shell (root when available) |
+| `device_info` | Model, Android version, battery, screen, network, root status |
 
-## Quick start
+## Root or no root
 
-1. **Install the APK** from [Releases](../../releases) on a rooted phone (Magisk, KernelSU or APatch).
-2. **Open DroidMCP**, tap **Start server**, and grant root.
-   It gets a random device ID and connects to the default relay.
-   If the relay is private, enter its agent key first.
-3. **Connect your client.** **Copy MCP client config** gives ready-made JSON, or for Claude Code:
+| | With root | Without root |
+|---|---|---|
+| Screen, input, keys | `screencap`, `input` | Accessibility service |
+| Notifications | `dumpsys` | Notification access |
+| SMS, apps, files | Root shell | Android permissions |
+| Linux (Alpine, Ubuntu) | ✓ | ✓ (proot) |
+| Other apps' private data, system files | ✓ | — |
 
-   ```bash
-   claude mcp add --transport http android https://<relay>/d/<device-id>/mcp \
-     --header "Authorization: Bearer <token from the app>"
-   ```
+Each tool uses root when it's available and the permission-based path otherwise.
 
-To check whether your phone is connected, open `https://<relay>/d/<device-id>/status`.
+## The app
 
-In your root manager, turn off the superuser toast for DroidMCP, or every tool call shows one.
+- **Home:** a power button, live status, uptime/actions/errors, the connect card, and a setup checklist when root is missing.
+- **Activity:** every AI action for 30 days, grouped by day. Tap one for details: time, duration, client, arguments and result.
+- **Terminal:** real interactive sessions (vim, top, Ctrl+C): Alpine, Ubuntu, the Android shell, and Termux (with root, if installed). Several sessions can run at once, and you can rename them.
+- **Settings:** Connection, Linux (download or delete distros, pick the default), Bubble, Security, Permissions, General and About.
+
+## Security
+
+- **Token:** clients send `Authorization: Bearer <token>`. It's on by default, and you can turn it off, at your own risk.
+- **Approve on this phone:** optionally, a new AI client must be allowed on the phone (Allow / Always / Deny) before it can run anything.
+- **The relay can't control your phone.** It only forwards requests; the phone checks the token. HTTPS ends at the relay, though, so its operator could see your traffic. Run your own relay for full privacy.
+
+See [SECURITY.md](SECURITY.md) for details. Only use DroidMCP on devices you own.
 
 ## Run your own relay
 
-Running your own relay means nobody else can see your traffic.
-
-### Cloudflare Workers (free tier works)
+**Cloudflare Workers** (the free tier is enough):
 
 ```bash
 cd relay-cloudflare
-npx wrangler deploy                       # prints https://droidmcp-relay.<you>.workers.dev
-npx wrangler secret put AGENT_KEY         # optional: make it private
+npx wrangler deploy                 # prints your relay URL
+npx wrangler secret put AGENT_KEY   # optional: makes the relay private
 ```
 
-Put that URL (and the agent key, if you set one) into the app.
-To use a custom domain, add `"routes": [{ "pattern": "relay.example.com", "custom_domain": true }]` to `wrangler.jsonc`.
-
-### Node / Docker (any VPS)
+**Node / Docker** (any server):
 
 ```bash
-cd relay
-docker build -t droidmcp-relay .
-docker run -d --restart=always -p 8080:8080 -v droidmcp:/data \
-  -e AGENT_KEY="$(openssl rand -hex 24)" droidmcp-relay     # omit AGENT_KEY for an open relay
+cd relay && docker build -t droidmcp-relay .
+docker run -d --restart=always -p 8080:8080 -v droidmcp:/data droidmcp-relay
 ```
 
-Put HTTPS in front of it (e.g. Caddy: `relay.example.com { reverse_proxy localhost:8080 }`).
+Put HTTPS in front of it (e.g. Caddy). Then set the relay URL, and the agent key if you set one, in **Settings → Connection**.
 
-### No relay at all
+**No relay:** the app also serves `http://<phone-ip>:8765/mcp` for Wi-Fi, Tailscale or `adb forward`.
 
-The app also serves `http://<phone-ip>:8765/mcp` directly. Use it over LAN or Tailscale, or with
-`adb forward tcp:8765 tcp:8765` → `http://localhost:8765/mcp`.
-
-## How relay registration works
-
-- On first launch, each phone generates a random **device ID** (`p-…`) and a **device secret**.
-- The first phone to connect with an ID claims it. After that, only the same secret can use it.
-  IDs unused for 90 days are released.
-- A relay with `AGENT_KEY` set is **private**: phones must also present that key.
-- MCP clients authenticate to the **phone** with the client token. The relay just forwards.
-
-## Build from source
+## Build
 
 ```bash
-cd android
-./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
+cd android && ./gradlew assembleDebug
 ```
 
-Requires JDK 17+ and the Android SDK (compileSdk 36).
-
-CI builds every push. Tagging `vX.Y.Z` publishes a signed release when these repository secrets are set:
-`DROIDMCP_KEYSTORE_B64`, `DROIDMCP_KEYSTORE_PASSWORD`, `DROIDMCP_KEY_ALIAS` and `DROIDMCP_KEY_PASSWORD`.
-
-## Limits
-
-- `ui_tree` uses `uiautomator dump`, which fails on secure screens (lock screen, banking apps) and sometimes mid-animation. Use `screenshot` there.
-- Apps that set `FLAG_SECURE` show up black in screenshots.
-- Some OEM ROMs kill background apps aggressively. Set DroidMCP's battery usage to "unrestricted".
-  (With root, the app already whitelists itself from Doze.)
+You need JDK 17+ and the Android SDK (compileSdk 37). Every push is built by CI. A `vX.Y.Z` tag publishes a signed release when the `DROIDMCP_KEYSTORE_*` repository secrets are set.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Bundled third-party components are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
