@@ -88,7 +88,7 @@ class RelayClient(
         }
         val http = wsUrl().replaceFirst(Regex("^ws", RegexOption.IGNORE_CASE), "http")
         if ("$http/agent".toHttpUrlOrNull() == null) return "relay URL '$relayUrl' is not a valid URL"
-        if (!device.matches(Regex("[A-Za-z0-9_-]{8,64}"))) return "device ID must be 8-64 letters, digits, - or _"
+        if (!device.matches(Regex("[A-Za-z0-9_-]{3,64}"))) return "device ID must be 3-64 letters, digits, - or _"
         return null
     }
 

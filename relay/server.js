@@ -84,7 +84,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({ ok: true, devices: [...agents.keys()].length, pending: pending.size }));
   }
-  const m = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{8,64})(\/.*)?$/);
+  const m = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{1,64})(\/.*)?$/);
   if (!m) return fail(res, 404, "Not found. MCP endpoints look like /d/<device>/mcp.");
   const [, device, rest = "/"] = m;
   if (rest === "/status") {
@@ -179,12 +179,12 @@ server.on("upgrade", (req, socket, head) => {
   try { url = new URL(req.url, "http://x"); } catch { return reject(socket, 400, "Bad Request"); }
   if (url.pathname !== "/agent") return reject(socket, 404, "Not Found");
   const device = url.searchParams.get("device") || "";
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(device)) return reject(socket, 400, "Bad Request");
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(device)) return reject(socket, 400, "Bad Request");
+  const secret = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   if (AGENT_KEY && !safeEqual(req.headers["x-agent-key"] || "", AGENT_KEY)) {
-    log(`[x] rejected '${device}' from ${req.socket.remoteAddress}: wrong or missing X-Agent-Key`);
+    log(`[x] rejected '${device}' from ${req.socket.remoteAddress}: wrong or missing agent key`);
     return reject(socket, 401, "Unauthorized");
   }
-  const secret = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   if (secret.length < 32) return reject(socket, 401, "Unauthorized");
   const hash = sha256(secret);
   if (claims[device] && !safeEqual(claims[device], hash)) {

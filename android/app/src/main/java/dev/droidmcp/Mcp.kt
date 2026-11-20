@@ -98,7 +98,15 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     }
                     Log.i(TAG, "tool call: $name")
                     ActivityLog.add("$name ${args.toString().take(200)}")
-                    result(id, tools.call(name, args))
+                    Island.start(name, args)
+                    var ok = false
+                    try {
+                        val r = tools.call(name, args)
+                        ok = !r.optBoolean("isError")
+                        result(id, r)
+                    } finally {
+                        Island.finish(name, ok)
+                    }
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))
                 "resources/templates/list" -> result(id, JSONObject().put("resourceTemplates", JSONArray()))
@@ -126,8 +134,9 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
         const val INSTRUCTIONS =
             "You control a rooted Android phone. Typical loop: screenshot or ui_tree to see the screen, " +
                 "then tap/swipe/type_text/key to act, then look again. ui_tree gives exact tap coordinates. " +
-                "shell runs as root and can do anything else (pm, am, settings, svc, content, dumpsys, cmd)."
+                "shell runs as root and can do anything else (pm, am, settings, svc, content, dumpsys, cmd). " +
+                "linux_exec runs commands in a full Alpine Linux (apk packages: python, git, node, gcc, …) without needing root."
     }
 }
 
-object BuildInfo { const val VERSION = "0.3.0" }
+object BuildInfo { const val VERSION = "0.5.0" }

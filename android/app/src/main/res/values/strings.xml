@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="a11y_description">Lets AI agents you connect through DroidMCP see the screen, tap, swipe and type without root. Only MCP clients that have your DroidMCP token can use it, and a notification shows while the server runs.</string>
+</resources>

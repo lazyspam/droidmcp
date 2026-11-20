@@ -67,8 +67,10 @@ class McpService : Service() {
             try {
                 Shell.run("dumpsys deviceidle whitelist +$packageName; " +
                     "cmd appops set $packageName RUN_ANY_IN_BACKGROUND allow; " +
+                    "appops set $packageName SYSTEM_ALERT_WINDOW allow; " +
                     "pm grant $packageName android.permission.POST_NOTIFICATIONS 2>/dev/null")
                 Status.root = "granted"
+                Island.attach(this)
             } catch (e: RootUnavailable) {
                 Status.root = "NOT available: ${e.message}"
                 ActivityLog.add("✗ ${e.message} Most tools need root.")
@@ -102,6 +104,7 @@ class McpService : Service() {
             Status.relay = "not configured"
         }
         ActivityLog.add("service started")
+        Island.attach(this)
     }
 
     override fun onDestroy() {
@@ -111,6 +114,7 @@ class McpService : Service() {
         local = null
         wake?.takeIf { it.isHeld }?.release()
         wifi?.takeIf { it.isHeld }?.release()
+        Island.detach()
         Status.running = false
         Status.relay = "off"
         Status.local = "off"

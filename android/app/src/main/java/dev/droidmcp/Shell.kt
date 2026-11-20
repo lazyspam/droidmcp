@@ -26,6 +26,35 @@ object Shell {
     @Volatile var rootState: Boolean? = null
         private set
 
+    /**
+     * Runs a program directly (no su), feeding [stdin] if given. Used for proot and other bundled binaries.
+     * Killing the process on timeout is the caller's job via flags like proot's --kill-on-exit.
+     */
+    fun exec(argv: List<String>, env: Map<String, String> = emptyMap(), timeoutSec: Long = 30, stdin: String? = null,
+             removeEnv: List<String> = emptyList()): ShellResult {
+        val pb = ProcessBuilder(argv)
+        pb.environment().apply { removeEnv.forEach { remove(it) }; putAll(env) }
+        val proc = pb.start()
+        val out = ByteArrayOutputStream()
+        val err = ByteArrayOutputStream()
+        val tOut = pump(proc.inputStream, out)
+        val tErr = pump(proc.errorStream, err)
+        try {
+            proc.outputStream.use { if (stdin != null) it.write(stdin.toByteArray()) }
+        } catch (_: IOException) {
+        }
+        val finished = proc.waitFor(timeoutSec, TimeUnit.SECONDS)
+        if (!finished) proc.destroyForcibly()
+        tOut.join(2000); tErr.join(2000)
+        return ShellResult(
+            exitCode = if (finished) proc.exitValue() else -1,
+            stdout = out.toByteArray(),
+            stderr = err.toString(Charsets.UTF_8.name()),
+            timedOut = !finished,
+            truncated = out.size() >= MAX_OUTPUT,
+        )
+    }
+
     fun run(script: String, root: Boolean = true, timeoutSec: Long = 30): ShellResult {
         val proc = try {
             ProcessBuilder(if (root) "su" else "sh").start()

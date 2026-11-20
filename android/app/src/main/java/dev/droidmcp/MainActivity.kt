@@ -32,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var log: TextView
     private lateinit var toggle: Button
     private lateinit var crashView: TextView
+    private lateinit var perms: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +64,14 @@ class MainActivity : Activity() {
         localPort = field("8765", Prefs.localPort(this).toString(), InputType.TYPE_CLASS_NUMBER)
         allowShell = check("Allow the root shell tool", Prefs.allowShell(this))
         autostart = check("Start on boot", Prefs.autostart(this))
+        CheckBox(this).apply {
+            text = "Show activity island (floating pill showing what the AI does)"
+            isChecked = Prefs.island(this@MainActivity)
+            setOnCheckedChangeListener { _, on ->
+                Prefs.setIsland(this@MainActivity, on)
+                if (on && Status.running) Island.attach(this@MainActivity) else Island.detach()
+            }
+        }.also { col.addView(it) }
         button("Save") { if (save()) toast(if (Status.running) "Saved. Stop and start the server to apply." else "Saved.") }
 
         info = TextView(this).apply { setTextIsSelectable(true); typeface = Typeface.MONOSPACE; setPadding(0, pad, 0, 0) }
@@ -87,6 +96,33 @@ class MainActivity : Activity() {
                 Status.root = if (msg == "Root OK") "granted" else msg
                 runOnUiThread { toast(msg); refresh() }
             }.start()
+        }
+
+        label("Without root: permissions")
+        perms = TextView(this).apply { typeface = Typeface.MONOSPACE; textSize = 12f }
+        col.addView(perms)
+        button("Accessibility (screen, taps, typing)") {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            toast("Find DroidMCP and turn it on. Greyed out? App info → ⋮ → Allow restricted settings.")
+        }
+        button("Notification access") {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        button("Grant SMS permission") {
+            requestPermissions(arrayOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS), 2)
+        }
+        button("Allow all files access") {
+            if (Build.VERSION.SDK_INT >= 30) {
+                startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:$packageName")))
+            } else {
+                requestPermissions(arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE), 3)
+            }
+        }
+        button("Display over other apps (for the island)") {
+            startActivity(android.content.Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:$packageName")))
         }
 
         label("Activity")
@@ -127,8 +163,8 @@ class MainActivity : Activity() {
             relayUrl.error = "Must start with https:// (or http:// for testing)"; ok = false
         }
         val name = deviceName.text.toString().trim()
-        if (!name.matches(Regex("[A-Za-z0-9_-]{8,64}"))) {
-            deviceName.error = "8-64 letters, digits, - or _"; ok = false
+        if (!name.matches(Regex("[A-Za-z0-9_-]{3,64}"))) {
+            deviceName.error = "3-64 letters, digits, - or _"; ok = false
         }
         val port = localPort.text.toString().toIntOrNull()
         if (localEnabled.isChecked && (port == null || port !in 1024..65535)) {
@@ -151,7 +187,8 @@ class MainActivity : Activity() {
         toggle.text = if (Status.running) "Stop server" else "Start server"
         status.text = buildString {
             append("Server: ${if (Status.running) "running" else "stopped"}\n")
-            append("Root: ${Status.root}\n")
+            // Any successful root call since start (including tool calls) proves root, even if the startup check ran before the grant.
+            append("Root: ${if (Shell.rootState == true) "granted" else Status.root}\n")
             append("Relay: ${Status.relay}\n")
             append("Local: ${Status.local}")
             Status.error?.let { append("\n⚠ $it") }
@@ -166,6 +203,18 @@ class MainActivity : Activity() {
             append("Token (send as 'Authorization: Bearer <token>'):\n  ${Prefs.token(this@MainActivity)}")
         }
         log.text = ActivityLog.text()
+        fun mark(b: Boolean) = if (b) "✓" else "✗"
+        val sms = checkSelfPermission(android.Manifest.permission.READ_SMS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val files = if (Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
+            else checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        perms.text = buildString {
+            append("${mark(Shell.rootState == true)} root (covers everything below)\n")
+            append("${mark(DroidAccessibility.instance != null)} accessibility\n")
+            append("${mark(NotifListener.enabled(this@MainActivity))} notification access\n")
+            append("${mark(sms)} SMS\n")
+            append("${mark(files)} all files access\n")
+            append("${mark(android.provider.Settings.canDrawOverlays(this@MainActivity))} display over other apps")
+        }
     }
 
     private fun clientConfig(): String {

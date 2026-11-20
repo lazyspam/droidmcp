@@ -26,7 +26,7 @@ object Prefs {
 
     /** Random per-install device ID: part of the public URL. */
     fun deviceName(c: Context): String {
-        p(c).getString("device_name", null)?.takeIf { it.length >= 8 }?.let { return it }
+        p(c).getString("device_name", null)?.takeIf { it.length >= 3 }?.let { return it }
         return newDeviceId(c)
     }
 
@@ -52,6 +52,8 @@ object Prefs {
     fun localPort(c: Context) = p(c).getInt("local_port", 8765)
     fun allowShell(c: Context) = p(c).getBoolean("allow_shell", true)
     fun autostart(c: Context) = p(c).getBoolean("autostart", false)
+    fun island(c: Context) = p(c).getBoolean("island", true)
+    fun setIsland(c: Context, on: Boolean) = p(c).edit().putBoolean("island", on).apply()
 
     fun save(
         c: Context, relayUrl: String, agentKey: String, deviceName: String,

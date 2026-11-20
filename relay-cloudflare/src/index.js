@@ -19,7 +19,7 @@ const MAX_BODY = 50 * 1024 * 1024;
 const MAX_PENDING = 32;
 const FORWARD_HEADERS = ["authorization", "content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
 const RETURN_HEADERS = /^(content-type|mcp-session-id|www-authenticate|allow|retry-after)$/i;
-const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
+const DEVICE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const CLAIM_TTL_DAYS = 90;
 const RATE_PER_MIN = 240; // MCP requests per device per minute
 
@@ -68,18 +68,29 @@ export default {
         }
         const device = url.searchParams.get("device") || "";
         if (!DEVICE_RE.test(device)) {
-          return new Response("Bad device ID: use 8-64 letters, digits, - or _", { status: 400 });
-        }
-        if (env.AGENT_KEY && !(await safeEqual(request.headers.get("X-Agent-Key") || "", env.AGENT_KEY))) {
-          console.log(`rejected '${device}': wrong or missing X-Agent-Key (private relay)`);
-          return new Response("This relay is private: wrong or missing agent key", { status: 401 });
+          return new Response("Bad device ID: use 1-64 letters, digits, - or _", { status: 400 });
         }
         const secret = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+        if (env.AGENT_KEY && !(await safeEqual(request.headers.get("X-Agent-Key") || "", env.AGENT_KEY))) {
+          console.log(`rejected '${device}': wrong or missing agent key (private relay)`);
+          return new Response("This relay is private: wrong or missing agent key", { status: 401 });
+        }
         if (secret.length < 32) return new Response("Missing device secret", { status: 401 });
         return env.DEVICE.get(env.DEVICE.idFromName(device)).fetch(request);
       }
 
-      const m = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{1,40})(\/.*)?$/);
+      // Admin (private relays only): release a device ID so another phone can claim it.
+      //   curl -X DELETE -H "X-Agent-Key: $KEY" https://<relay>/admin/d/<device>/claim
+      const adm = url.pathname.match(/^\/admin\/d\/([A-Za-z0-9_-]{1,64})\/claim$/);
+      if (adm) {
+        if (!env.AGENT_KEY || !(await safeEqual(request.headers.get("X-Agent-Key") || "", env.AGENT_KEY))) {
+          return fail(401, "Admin endpoints need the relay's agent key (and only exist on private relays).");
+        }
+        if (request.method !== "DELETE") return fail(405, "Use DELETE.");
+        return env.DEVICE.get(env.DEVICE.idFromName(adm[1])).fetch(new Request("https://do/admin/release", { method: "POST" }));
+      }
+
+      const m = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{1,64})(\/.*)?$/);
       if (!m) return fail(404, "Not found. MCP endpoints look like /d/<device>/mcp.");
       const len = Number(request.headers.get("Content-Length") || 0);
       if (len > MAX_BODY) return fail(413, `Request body too large (max ${MAX_BODY / 1024 / 1024} MB).`);
@@ -111,6 +122,13 @@ export class Device extends DurableObject {
   async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === "/agent") return this.acceptPhone(request, url);
+    if (url.pathname === "/admin/release") {
+      await this.ctx.storage.deleteAll();
+      for (const ws of this.ctx.getWebSockets("phone")) {
+        try { ws.close(4001, "device ID released by relay admin"); } catch {}
+      }
+      return Response.json({ released: true });
+    }
 
     const device = url.pathname.split("/")[2];
     const rest = url.pathname.slice(`/d/${device}`.length) || "/";
