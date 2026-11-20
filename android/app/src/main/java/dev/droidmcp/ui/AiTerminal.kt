@@ -29,14 +29,18 @@ object AiTerminal {
 __dmcp() {
   local id="${'$'}1" d=/tmp/.dmcp cmd rc
   cmd=${'$'}(cat "${'$'}d/${'$'}id.cmd")
+  : > "${'$'}d/started"
   printf '\033[1A\033[2K\r\033[38;5;75mAI ❯\033[0m %s\n' "${'$'}cmd"
   exec 9> >(tee "${'$'}d/${'$'}id.out")
+  # Ctrl+C aborts this function; the prompt timestamp below tells the app the command ended.
   { eval "${'$'}cmd"; } >&9 2>&9
   rc=${'$'}?
   exec 9>&-
   sleep 0.05
   echo "${'$'}rc" > "${'$'}d/${'$'}id.rc"
 }
+# Every prompt leaves a timestamp: if a prompt appears while the app is waiting for a result, the command was cut short.
+PROMPT_COMMAND='[ -d /tmp/.dmcp ] && : > /tmp/.dmcp/prompt'"${'$'}{PROMPT_COMMAND:+; ${'$'}PROMPT_COMMAND}"
 """
 
     private val main = Handler(Looper.getMainLooper())
@@ -45,6 +49,9 @@ __dmcp() {
     /** Command the AI is running right now in the visible session (for the "AI is running" strip), or null. */
     var running by mutableStateOf<Pair<Int, String>?>(null)
         private set
+
+    /** The user pressed Stop on the current AI command. */
+    @Volatile private var stoppedByUser = false
 
     private fun <T> onMain(block: () -> T): T {
         if (Looper.myLooper() == Looper.getMainLooper()) return block()
@@ -64,8 +71,17 @@ __dmcp() {
             }
     }
 
-    /** The shell is at its prompt (no foreground job), so typing a command won't go into someone else's program. */
-    private fun idle(tab: TermTab): Boolean {
+    /**
+     * The shell is free: no foreground program, and the last AI command has returned to the prompt
+     * (a command stuck in a shell builtin like `read` has no separate process, so check the markers too).
+     */
+    private fun idle(tab: TermTab, dir: File): Boolean {
+        val started = File(dir, "started"); val prompt = File(dir, "prompt")
+        if (started.exists() && (!prompt.exists() || prompt.lastModified() < started.lastModified())) return false
+        return procIdle(tab)
+    }
+
+    private fun procIdle(tab: TermTab): Boolean {
         val root = tab.session.pid
         if (root <= 0) return false
         // proot's child is the interactive shell (bash); find it among proot's descendants.
@@ -85,10 +101,11 @@ __dmcp() {
         val lock = synchronized(locks) { locks.getOrPut(d) { Any() } }
         synchronized(lock) {
             var tab = tab(ctx, d)
+            val dir = File(env.rootfs, "tmp/.dmcp").apply { mkdirs() }
             // Wait briefly for the shell to be at its prompt (the user may be running something).
             val waitUntil = System.currentTimeMillis() + 15_000
             Thread.sleep(300)
-            while (!idle(tab)) {
+            while (!idle(tab, dir)) {
                 if (tab.exited) tab = tab(ctx, d)
                 if (System.currentTimeMillis() > waitUntil) {
                     throw ToolError("The AI terminal is busy with another program (maybe yours). Finish or Ctrl+C it in the " +
@@ -96,18 +113,26 @@ __dmcp() {
                 }
                 Thread.sleep(250)
             }
-            val dir = File(env.rootfs, "tmp/.dmcp").apply { mkdirs() }
             val id = UUID.randomUUID().toString().take(8)
             val cmdFile = File(dir, "$id.cmd"); val out = File(dir, "$id.out"); val rc = File(dir, "$id.rc")
             cmdFile.writeText(command)
+            val prompt = File(dir, "prompt")
+            stoppedByUser = false
             running = tab.id to command
             try {
                 // Ctrl+U clears anything half-typed; the leading space keeps it out of history.
+                val started = System.currentTimeMillis()
                 onMain { write(tab, "\u0015 __dmcp $id\r") }
-                val deadline = System.currentTimeMillis() + timeoutSec * 1000
+                val deadline = started + timeoutSec * 1000
                 var timedOut = false
+                var cutShort = false
                 while (!rc.exists()) {
                     if (tab.exited) throw ToolError("The AI terminal closed while running the command. ${tail(out)}")
+                    // Safety net: the shell is back at its prompt but never reported a result (interrupted some other way).
+                    if (prompt.exists() && prompt.lastModified() > started + 300) {
+                        Thread.sleep(400)
+                        if (!rc.exists()) { cutShort = true; break }
+                    }
                     if (System.currentTimeMillis() > deadline) {
                         timedOut = true
                         onMain { write(tab, "\u0003") } // Ctrl+C, like a person would
@@ -118,9 +143,14 @@ __dmcp() {
                     Thread.sleep(120)
                 }
                 Thread.sleep(60)
-                val code = rc.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: -1
+                val code = rc.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: if (cutShort || stoppedByUser) 130 else -1
                 val bytes = if (out.exists()) out.readBytes() else ByteArray(0)
-                return ShellResult(code, clean(bytes), "", timedOut, bytes.size > 2_000_000)
+                val note = when {
+                    stoppedByUser -> "Stopped by the user (Ctrl+C in the Terminal tab). Ask them before running it again."
+                    cutShort -> "The command was interrupted before it finished (Ctrl+C typed in the terminal)."
+                    else -> ""
+                }
+                return ShellResult(code, clean(bytes), note, timedOut, bytes.size > 2_000_000)
             } finally {
                 running = null
                 listOf(cmdFile, out, rc).forEach { it.delete() }
@@ -147,6 +177,7 @@ __dmcp() {
     /** Ctrl+C in the AI session that is currently running something. */
     fun interrupt() {
         val id = running?.first ?: return
+        stoppedByUser = true
         main.post { Terminals.tabs.firstOrNull { it.id == id }?.let { write(it, "\u0003") } }
     }
 

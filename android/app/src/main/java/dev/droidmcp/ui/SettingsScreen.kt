@@ -263,7 +263,33 @@ private fun ConnectionPage(state: AppState, restart: () -> Unit) {
 private fun SecurityPage(state: AppState, restart: () -> Unit) {
     val ctx = LocalContext.current
     var shellOn by remember { mutableStateOf(Prefs.allowShell(ctx)) }
+    var tokenOn by remember { mutableStateOf(Prefs.requireToken(ctx)) }
+    var approve by remember { mutableStateOf(Prefs.approveClients(ctx)) }
+    var trusted by remember { mutableStateOf(Prefs.trustedClients(ctx).sorted()) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    Section("Who can connect") {
+        SwitchRow("Require token", if (tokenOn) "AI clients must send your token" else "Off: anyone who knows your URL can connect",
+            tokenOn, padded = false) { on ->
+            if (on) { tokenOn = true; Prefs.setRequireToken(ctx, true) }
+            else confirm = "Turn off the token? Anyone who knows or guesses your URL could control this phone. " +
+                "Consider turning on “Approve on this phone” too." to { tokenOn = false; Prefs.setRequireToken(ctx, false); state.refresh() }
+        }
+        HorizontalDivider()
+        SwitchRow("Approve on this phone", "A new AI client must be allowed here before it can run anything", approve, padded = false) {
+            approve = it; Prefs.setApproveClients(ctx, it)
+        }
+        if (approve && trusted.isNotEmpty()) {
+            HorizontalDivider()
+            Text("Always allowed", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp))
+            trusted.forEach { name ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { Prefs.removeTrustedClient(ctx, name); trusted = Prefs.trustedClients(ctx).sorted() }) { Text("Remove") }
+                }
+            }
+        }
+    }
     Section(null) {
         SwitchRow("Allow shell commands", "Lets the AI run any command. Turn off to limit it to the safer tools.", shellOn, padded = false) {
             shellOn = it

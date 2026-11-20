@@ -84,11 +84,13 @@ class AppState(private val ctx: Context) {
 
     fun clientJson(): String {
         val url = ui.publicUrl ?: "http://PHONE_IP:${Prefs.localPort(ctx)}/mcp"
+        if (!Prefs.requireToken(ctx)) return """{"mcpServers":{"android":{"type":"http","url":"$url"}}}"""
         return """{"mcpServers":{"android":{"type":"http","url":"$url","headers":{"Authorization":"Bearer ${ui.token}"}}}}"""
     }
 
     fun claudeCommand(): String {
         val url = ui.publicUrl ?: "http://PHONE_IP:${Prefs.localPort(ctx)}/mcp"
+        if (!Prefs.requireToken(ctx)) return "claude mcp add --transport http android $url"
         return "claude mcp add --transport http android $url --header \"Authorization: Bearer ${ui.token}\""
     }
 

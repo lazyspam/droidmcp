@@ -16,15 +16,23 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
 
     private val supportedVersions = listOf("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
+    /** Session id -> client name ("claude-code"), issued on initialize. */
+    private val sessions = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val reqSession = ThreadLocal<String?>()
+    private val newSession = ThreadLocal<String?>()
+
     fun handle(method: String, path: String, headers: Map<String, String>, body: String): HttpReply {
         val h = headers.mapKeys { it.key.lowercase() }
         if (!path.substringBefore('?').trimEnd('/').endsWith("/mcp")) return HttpReply(404, """{"error":"not found, use /mcp"}""")
-        if (!authorized(h["authorization"])) {
+        if (Prefs.requireToken(ctx) && !authorized(h["authorization"])) {
             return HttpReply(401, """{"error":"unauthorized"}""", mapOf("WWW-Authenticate" to "Bearer"))
         }
+        reqSession.set(h["mcp-session-id"]); newSession.set(null)
         return when (method.uppercase()) {
-            "POST" -> post(body)
-            "DELETE" -> HttpReply(200, "{}")
+            "POST" -> post(body).let { r ->
+                newSession.get()?.let { sid -> HttpReply(r.status, r.body, r.headers + ("Mcp-Session-Id" to sid)) } ?: r
+            }
+            "DELETE" -> { h["mcp-session-id"]?.let { sessions.remove(it) }; HttpReply(200, "{}") }
             // No server-initiated stream; spec allows 405 for GET.
             else -> HttpReply(405, """{"error":"method not allowed"}""", mapOf("Allow" to "POST, DELETE"))
         }
@@ -83,6 +91,9 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     params.optJSONObject("clientInfo")?.let { ci ->
                         Status.client = listOf(ci.optString("name"), ci.optString("version")).filter { it.isNotBlank() }.joinToString(" ")
                     }
+                    val sid = java.util.UUID.randomUUID().toString()
+                    sessions[sid] = params.optJSONObject("clientInfo")?.optString("name")?.ifBlank { null } ?: "An AI client"
+                    newSession.set(sid)
                     result(id, JSONObject()
                         .put("protocolVersion", if (asked in supportedVersions) asked else supportedVersions.first())
                         .put("capabilities", JSONObject().put("tools", JSONObject().put("listChanged", false)))
@@ -94,6 +105,14 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                 "tools/call" -> {
                     val name = params.opt("name") as? String
                         ?: return error(id, -32602, "Invalid params: tools/call needs a string 'name'.")
+                    // On-phone approval (if enabled): per session, or per client name for clients without sessions.
+                    val sid = reqSession.get()
+                    val client = sid?.let { sessions[it] } ?: Status.client.substringBefore(' ').ifBlank { "An AI client" }
+                    Approvals.check(ctx, sid ?: "client:$client", client)?.let { reason ->
+                        ActivityLog.event(AiEvent(System.currentTimeMillis(), name, "Blocked: not approved", false, "", reason, 0, client))
+                        return result(id, JSONObject().put("isError", true)
+                            .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", reason))))
+                    }
                     val args = when (val a = params.opt("arguments")) {
                         null, JSONObject.NULL -> JSONObject()
                         is JSONObject -> a
@@ -170,4 +189,4 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     }
 }
 
-object BuildInfo { const val VERSION = "0.12.1" }
+object BuildInfo { const val VERSION = "0.13.1" }

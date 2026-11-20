@@ -336,6 +336,10 @@ private fun ConnectCard(state: AppState) {
     Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
             Text("Connect your AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            if (!dev.droidmcp.Prefs.requireToken(LocalContext.current)) {
+                Text("Token is off: anyone with this URL can control your phone.", style = MaterialTheme.typography.bodySmall,
+                    color = StatusColors.warn, modifier = Modifier.padding(vertical = 4.dp))
+            }
             Text(ui.publicUrl ?: "Local network only", fontFamily = Mono, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(14.dp))

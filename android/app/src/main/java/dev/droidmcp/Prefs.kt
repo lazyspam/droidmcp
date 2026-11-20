@@ -52,6 +52,18 @@ object Prefs {
     fun localPort(c: Context) = p(c).getInt("local_port", 8765)
     fun allowShell(c: Context) = p(c).getBoolean("allow_shell", true)
     fun autostart(c: Context) = p(c).getBoolean("autostart", false)
+
+    /** Clients must send the bearer token. On by default; turning it off is the owner's choice and risk. */
+    fun requireToken(c: Context) = p(c).getBoolean("require_token", true)
+    fun setRequireToken(c: Context, on: Boolean) = p(c).edit().putBoolean("require_token", on).apply()
+
+    /** Ask on the phone before a new AI client may run tools. */
+    fun approveClients(c: Context) = p(c).getBoolean("approve_clients", false)
+    fun setApproveClients(c: Context, on: Boolean) = p(c).edit().putBoolean("approve_clients", on).apply()
+
+    fun trustedClients(c: Context): Set<String> = p(c).getStringSet("trusted_clients", emptySet())!!.toSet()
+    fun addTrustedClient(c: Context, name: String) = p(c).edit().putStringSet("trusted_clients", trustedClients(c) + name).apply()
+    fun removeTrustedClient(c: Context, name: String) = p(c).edit().putStringSet("trusted_clients", trustedClients(c) - name).apply()
     /** User hid the server notification (root: snoozed indefinitely while the server keeps running). */
     fun notifHidden(c: Context) = p(c).getBoolean("notif_hidden", false)
     fun setNotifHidden(c: Context, on: Boolean) = p(c).edit().putBoolean("notif_hidden", on).apply()
