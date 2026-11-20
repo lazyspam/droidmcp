@@ -4,6 +4,7 @@ import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
@@ -78,7 +79,9 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
             }
         },
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding).let { if (Tab.entries[tab] == Tab.TERMINAL) it.imePadding() else it }) {
+        // consumeWindowInsets stops the keyboard inset being added on top of the nav-bar inset (no gap above the keyboard).
+        Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
+            .let { if (Tab.entries[tab] == Tab.TERMINAL) it.imePadding() else it }) {
             when (Tab.entries[tab]) {
                 Tab.HOME -> HomeScreen(state, onStart, onStop) { tab = Tab.ACTIVITY.ordinal }
                 Tab.ACTIVITY -> ActivityScreen(state)

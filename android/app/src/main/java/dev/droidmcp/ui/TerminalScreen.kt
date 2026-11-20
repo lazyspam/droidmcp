@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -74,6 +76,7 @@ private object Mods {
     var alt by mutableStateOf(false)
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun TerminalScreen() {
     val ctx = LocalContext.current
@@ -98,7 +101,8 @@ fun TerminalScreen() {
                 else -> EmptyState { Terminals.open(ctx, true) }
             }
         }
-        if (tab != null) ExtraKeys(tab.session)
+        // Shortcuts belong to typing: only show them while the keyboard is up.
+        if (tab != null && WindowInsets.isImeVisible) ExtraKeys(tab.session)
     }
 }
 
@@ -108,19 +112,19 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
     var newOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
     val tab = Terminals.active
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         // Session switcher pill.
         Box {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Pill)
-                    .clickable { sessionsOpen = true }.padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+                    .clickable { sessionsOpen = true }.padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
             ) {
-                Box(Modifier.size(10.dp).clip(CircleShape).background(
+                Box(Modifier.size(8.dp).clip(CircleShape).background(
                     if (tab == null) StatusColors.off else if (tab.exited) StatusColors.error else StatusColors.live))
-                Spacer(Modifier.width(10.dp))
-                Text(tab?.title ?: "Terminal", color = PillText, fontSize = 16.sp, maxLines = 1)
-                Icon(Icons.Filled.ArrowDropDown, null, tint = PillText)
+                Spacer(Modifier.width(8.dp))
+                Text(tab?.title ?: "Terminal", color = PillText, fontSize = 14.sp, maxLines = 1)
+                Icon(Icons.Filled.ArrowDropDown, null, tint = PillText, modifier = Modifier.size(20.dp))
             }
             DropdownMenu(expanded = sessionsOpen, onDismissRequest = { sessionsOpen = false }) {
                 if (Terminals.tabs.isEmpty()) DropdownMenuItem(text = { Text("No sessions") }, onClick = {}, enabled = false)
@@ -136,7 +140,7 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
         }
         Spacer(Modifier.weight(1f))
         Box {
-            RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText) }
+            RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
             DropdownMenu(expanded = newOpen, onDismissRequest = { newOpen = false }) {
                 DropdownMenuItem(
                     text = { Column { Text("Alpine Linux"); Text("apk, git, python…", style = MaterialTheme.typography.bodySmall) } },
@@ -151,9 +155,9 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
                 )
             }
         }
-        Spacer(Modifier.width(10.dp))
+        Spacer(Modifier.width(8.dp))
         Box {
-            RoundIcon(onClick = { moreOpen = true }) { Icon(Icons.Filled.MoreVert, "More", tint = PillText) }
+            RoundIcon(onClick = { moreOpen = true }) { Icon(Icons.Filled.MoreVert, "More", tint = PillText, modifier = Modifier.size(20.dp)) }
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
                 DropdownMenuItem(text = { Text("Paste") }, enabled = tab != null, onClick = {
                     moreOpen = false; tab?.session?.onPasteTextFromClipboard()
@@ -174,13 +178,13 @@ private fun TopBar(onNew: (Boolean) -> Unit, linuxReady: Boolean) {
 
 @Composable
 private fun RoundIcon(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(Modifier.size(48.dp).clip(CircleShape).background(Pill).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(36.dp).clip(CircleShape).background(Pill).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
         content()
     }
 }
 
 private object TermFont {
-    var sp by mutableIntStateOf(14)
+    var sp by mutableIntStateOf(12)
     fun change(d: Int) { sp = (sp + d).coerceIn(8, 32) }
 }
 
@@ -250,13 +254,13 @@ private class ViewClient(private val view: TerminalView, private val ctx: Contex
 private fun ExtraKeys(session: TerminalSession) {
     Row(
         Modifier.fillMaxWidth().background(Color(0xFF0C0C0E)).horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Key("Ctrl", active = Mods.ctrl) { Mods.ctrl = !Mods.ctrl }
         Key("Alt", active = Mods.alt) { Mods.alt = !Mods.alt }
-        Box(Modifier.width(1.dp).height(28.dp).background(Color(0xFF3A3A3C)))
+        Box(Modifier.width(1.dp).height(20.dp).background(Color(0xFF3A3A3C)))
         Key("Tab") { session.write("\t") }
         Key("Esc") { session.write("\u001b") }
         Key("↑") { session.write("\u001b[A") }
@@ -274,12 +278,12 @@ private fun ExtraKeys(session: TerminalSession) {
 @Composable
 private fun Key(label: String, active: Boolean = false, onClick: () -> Unit) {
     Box(
-        Modifier.height(44.dp).clip(RoundedCornerShape(14.dp))
+        Modifier.height(34.dp).clip(RoundedCornerShape(10.dp))
             .background(if (active) MaterialTheme.colorScheme.primary else Pill)
-            .clickable(onClick = onClick).padding(horizontal = 16.dp),
+            .clickable(onClick = onClick).padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = if (active) MaterialTheme.colorScheme.onPrimary else PillText, fontSize = 16.sp)
+        Text(label, color = if (active) MaterialTheme.colorScheme.onPrimary else PillText, fontSize = 13.sp)
     }
 }
 

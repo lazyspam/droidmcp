@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.iputobject.droidmcp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.6.1"
+        versionCode = 12
+        versionName = "0.6.3"
     }
 
     // proot ships as lib*.so: it must be extracted to nativeLibraryDir, the only place apps may execute files from.
