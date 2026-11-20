@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "droidmcp-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "DEVICE", "class_name": "Device" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Device"] }]
+  // Optional: make the relay private with `wrangler secret put AGENT_KEY`.
+  // Optional: custom domain:  "routes": [{ "pattern": "relay.example.com", "custom_domain": true }]
+}

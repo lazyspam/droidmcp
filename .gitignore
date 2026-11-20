@@ -1,0 +1,21 @@
+# Build output
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# Local config and secrets — never commit
+local.properties
+*.jks
+*.keystore
+AGENT_KEY.txt
+.dev.vars
+claims.json*
+
+# Tooling
+node_modules/
+.wrangler/
+.idea/
+*.iml
+.DS_Store
