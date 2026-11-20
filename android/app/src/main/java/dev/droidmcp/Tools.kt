@@ -137,8 +137,11 @@ class Tools(private val ctx: Context) {
                 "VS Code server; apt install -y …). Defaults to the user's chosen distro. Home is /root; phone storage is at /sdcard. " +
                 "A distro is downloaded automatically on first use (Alpine ~3 MB, Ubuntu ~30 MB).",
             schema(
-                "command" to prop("string", "Shell command or script (run with /bin/sh -lc)"),
+                "command" to prop("string", "Shell command or script"),
                 "distro" to prop("string", "alpine or ubuntu (default: the user's default)"),
+                "session" to prop("boolean", "Run in the shared, visible AI terminal (default true): state like cd/env/venv " +
+                    "persists between calls and the user can watch, answer prompts or Ctrl+C. false = a fresh separate shell " +
+                    "(use for parallel or background work)."),
                 "timeout_sec" to prop("integer", "Timeout in seconds (default 120, max 1800)"),
                 required = listOf("command"),
             )) { a ->
@@ -147,9 +150,20 @@ class Tools(private val ctx: Context) {
             val env = linuxFor(a)
             val timeout = a.int("timeout_sec", 120, 1..1800)
             val setupNote = if (!env.installed) env.setup { ActivityLog.add("${env.distro.id}: $it") } + "\n" else ""
-            val r = env.run(cmd, timeout.toLong())
-            val sb = StringBuilder(setupNote)
-            sb.append("[${env.distro.label}] exit_code: ${r.exitCode}")
+            var shared = a.bool("session", true)
+            var note = ""
+            val r = if (shared) {
+                try {
+                    dev.droidmcp.ui.AiTerminal.run(ctx, env.distro, cmd, timeout.toLong())
+                } catch (e: ToolError) {
+                    if (e.message?.contains("busy") == true) throw e
+                    shared = false
+                    note = "(shared terminal unavailable: ${e.message}; ran in a separate shell)\n"
+                    env.run(cmd, timeout.toLong())
+                }
+            } else env.run(cmd, timeout.toLong())
+            val sb = StringBuilder(setupNote).append(note)
+            sb.append("[${env.distro.label}${if (shared) ", AI terminal" else ""}] exit_code: ${r.exitCode}")
             if (r.timedOut) sb.append(" (killed after ${timeout}s timeout; raise timeout_sec)")
             sb.append('\n')
             if (r.out.isNotEmpty()) {
@@ -160,6 +174,24 @@ class Tools(private val ctx: Context) {
             if (r.stderr.isNotEmpty()) sb.append("stderr:\n").append(r.stderr.take(20_000))
             if (r.out.isEmpty() && r.stderr.isEmpty()) sb.append("(no output)")
             text(sb.toString(), isError = r.exitCode != 0)
+        },
+        Tool("terminal_read",
+            "Read what's on a terminal screen in the app: the shared AI terminal (default) or the session the user has open " +
+                "(which=current). Use it when the user says they ran something themselves, or to see a prompt waiting for input.",
+            schema(
+                "which" to prop("string", "ai (default) or current"),
+                "lines" to prop("integer", "How many last lines (default 60, max 500)"),
+            )) { a ->
+            text(dev.droidmcp.ui.AiTerminal.read(a.str("which", "ai"), a.int("lines", 60, 1..500)))
+        },
+        Tool("terminal_input",
+            "Type into the shared AI terminal, e.g. answer a prompt (\"y\\n\"), or send ctrl_c. Use after terminal_read shows a waiting prompt.",
+            schema(
+                "text" to prop("string", "Text to type; \\n presses Enter"),
+                "ctrl_c" to prop("boolean", "Send Ctrl+C instead"),
+            )) { a ->
+            dev.droidmcp.ui.AiTerminal.type(if (a.bool("ctrl_c", false)) "\u0003" else a.str("text").replace("\n", "\r"))
+            text("Sent.")
         },
         Tool("linux_setup", "Install, reinstall or list the Linux distros used by linux_exec (alpine, ubuntu).",
             schema(

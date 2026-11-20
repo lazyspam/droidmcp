@@ -105,7 +105,10 @@ fun TerminalScreen() {
             when {
                 pending != null -> SetupLinux(pending, canCancel = tab != null,
                     onCancel = { setupFor = null }) { setupFor = null; Terminals.open(ctx, TermKind.of(pending)) }
-                tab != null -> TerminalPane(tab)
+                tab != null -> Column {
+                    AiStrip(tab)
+                    Box(Modifier.weight(1f)) { TerminalPane(tab) }
+                }
                 else -> EmptyState { setupFor = default }
             }
         }
@@ -209,6 +212,25 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
                     moreOpen = false; tab?.let { Terminals.close(it) }
                 })
             }
+        }
+    }
+}
+
+/** Shown above the AI session while the AI's command runs: what it's doing, and a Stop (Ctrl+C) button. */
+@Composable
+private fun AiStrip(tab: TermTab) {
+    val run = AiTerminal.running
+    androidx.compose.animation.AnimatedVisibility(run != null && run.first == tab.id) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).clip(RoundedCornerShape(Radius.small))
+                .background(StatusColors.busy.copy(alpha = 0.18f)).padding(start = 12.dp, end = 4.dp),
+        ) {
+            androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), color = StatusColors.busy, strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Text("AI ❯ ${run?.second?.lineSequence()?.firstOrNull().orEmpty()}", color = PillText, fontSize = 13.sp, maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, fontFamily = Mono, modifier = Modifier.weight(1f))
+            TextButton(onClick = { AiTerminal.interrupt() }) { Text("Stop") }
         }
     }
 }

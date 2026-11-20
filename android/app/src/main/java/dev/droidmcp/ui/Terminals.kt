@@ -24,15 +24,15 @@ enum class TermKind(val label: String, val distro: dev.droidmcp.Distro? = null) 
 }
 
 /** One terminal tab. */
-class TermTab(val id: Int, val kind: TermKind, val session: TerminalSession) {
-    var title by mutableStateOf("${kind.label} $id")
+class TermTab(val id: Int, val kind: TermKind, val session: TerminalSession, val ai: Boolean = false) {
+    var title by mutableStateOf(if (ai) "AI · ${kind.label}" else "${kind.label} $id")
     var exited by mutableStateOf(false)
     /** Set when the user named the session; programs' window titles then no longer overwrite it. */
     var renamed = false
 
     fun rename(name: String) {
         val n = name.trim()
-        if (n.isEmpty()) { renamed = false; title = "${kind.label} $id" } else { renamed = true; title = n.take(40) }
+        if (n.isEmpty()) { renamed = false; title = if (ai) "AI · ${kind.label}" else "${kind.label} $id" } else { renamed = true; title = n.take(40) }
     }
 }
 
@@ -96,17 +96,17 @@ object Terminals {
         ctx.packageManager.getApplicationInfo(TERMUX, 0); true
     } catch (_: Exception) { false }
 
-    /** Opens a new session and makes it current. Alpine requires [LinuxEnv.installed]. */
-    fun open(ctx: Context, kind: TermKind): TermTab {
+    /** Opens a new session and makes it current. Linux kinds require [LinuxEnv.installed]. Main thread only. */
+    fun open(ctx: Context, kind: TermKind, ai: Boolean = false, makeCurrent: Boolean = true): TermTab {
         val id = nextId++
         val session = when (kind) {
             TermKind.ALPINE, TermKind.UBUNTU -> linuxSession(ctx, kind.distro!!)
             TermKind.ANDROID -> androidSession(ctx)
             TermKind.TERMUX -> termuxSession(ctx)
         }
-        val tab = TermTab(id, kind, session)
+        val tab = TermTab(id, kind, session, ai)
         tabs.add(tab)
-        current = tabs.lastIndex
+        if (makeCurrent || tabs.size == 1) current = tabs.lastIndex
         return tab
     }
 
@@ -128,13 +128,18 @@ object Terminals {
         val env = LinuxEnv(ctx, distro)
         // Prompt: blue working dir, then $; set after /etc/profile via $ENV (read by interactive ash/bash).
         val rc = File(env.rootfs, "root/.droidmcp_rc")
-        if (!rc.exists()) {
-            rc.parentFile?.mkdirs()
-            rc.writeText(
+        rc.parentFile?.mkdirs()
+        // Always rewritten: it's ours (the user's own settings belong in ~/.bashrc / ~/.profile).
+        rc.writeText(
+            "[ -f /etc/profile ] && [ -z \"\$DROIDMCP_PROFILED\" ] && export DROIDMCP_PROFILED=1 && . /etc/profile\n" +
+                "[ -f ~/.bashrc ] && [ -n \"\$BASH_VERSION\" ] && . ~/.bashrc\n" +
                 "export PS1='\\[\\033[38;5;75m\\]\\w\\[\\033[0m\\] \\$ '\n" +
-                    "alias ls='ls --color=auto'\nalias ll='ls -la'\n"
-            )
-        }
+                "export HISTCONTROL=ignorespace\n" +
+                "alias ls='ls --color=auto'\nalias ll='ls -la'\n" +
+                // The AI helper is bash-only; plain sh never parses it.
+                "[ -n \"\$BASH_VERSION\" ] && . /root/.droidmcp_ai.sh\n"
+        )
+        File(env.rootfs, "root/.droidmcp_ai.sh").writeText(AiTerminal.HELPER)
         val script = "${welcome(distro)}; export ENV=/root/.droidmcp_rc; " +
             "if command -v bash >/dev/null; then exec bash --rcfile /root/.droidmcp_rc -i; else exec /bin/sh -l; fi"
         val (argv, vars) = env.invocation(script)

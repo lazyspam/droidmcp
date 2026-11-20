@@ -367,6 +367,8 @@ object Island {
             "shell" -> "$ ${s("command")}"
             "linux_exec" -> "🐧 ${a.optString("distro").takeIf { it.isNotBlank() }?.let { "$it: " } ?: ""}${s("command")}"
             "linux_setup" -> "Setting up Linux"
+            "terminal_read" -> "Reading the terminal"
+            "terminal_input" -> if (a.optBoolean("ctrl_c")) "Ctrl+C" else "Typing in the terminal"
             "device_info" -> "Checking the device"
             else -> tool
         }
