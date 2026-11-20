@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.rememberScrollState
@@ -129,8 +130,8 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
     val tab = Terminals.active
     renaming?.let { t -> RenameDialog(t) { renaming = null } }
     Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        // Session switcher pill.
-        Box {
+        // Session switcher pill: takes the free space, never pushes the buttons away; long names end in "…".
+        Box(Modifier.weight(1f)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clip(RoundedCornerShape(50)).background(Pill)
@@ -140,14 +141,32 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
                 if (tab != null) SessionIcon(tab.kind, dimmed = tab.exited, size = 18)
                 else Box(Modifier.size(8.dp).clip(CircleShape).background(StatusColors.off))
                 Spacer(Modifier.width(8.dp))
-                Text(tab?.title ?: "Terminal", color = PillText, fontSize = 14.sp, maxLines = 1)
+                Text(tab?.title ?: "Terminal", color = PillText, fontSize = 14.sp, maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                val count = Terminals.tabs.size
+                if (count > 1) {
+                    Spacer(Modifier.width(6.dp))
+                    Box(Modifier.clip(RoundedCornerShape(50)).background(Color(0xFF3A3A3C)).padding(horizontal = 7.dp, vertical = 1.dp)) {
+                        Text("$count", color = PillText, fontSize = 11.sp)
+                    }
+                }
                 Icon(Icons.Filled.ArrowDropDown, null, tint = PillText, modifier = Modifier.size(20.dp))
             }
             AppMenu(expanded = sessionsOpen, onDismiss = { sessionsOpen = false }) {
                 if (Terminals.tabs.isEmpty()) AppMenuItem(text = { Text("No sessions") }, onClick = {}, enabled = false)
-                Terminals.tabs.forEachIndexed { i, t ->
+                else Text("Sessions · ${Terminals.tabs.size}", style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                // AI sessions first, then yours in the order opened.
+                Terminals.tabs.withIndex().sortedByDescending { it.value.ai }.forEach { (i, t) ->
                     AppMenuItem(
-                        text = { Text(t.title + if (t.exited) "  (ended)" else "") },
+                        text = {
+                            Column(Modifier.widthIn(max = 220.dp)) {
+                                Text(t.title, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                if (t.exited || t.ai) Text(if (t.exited) "Ended" else "Used by the AI",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (t.exited) StatusColors.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        },
                         leadingIcon = { SessionIcon(t.kind, dimmed = t.exited) },
                         modifier = if (i == Terminals.current) Modifier.padding(horizontal = 6.dp)
                             .clip(RoundedCornerShape(Radius.small)).background(MaterialTheme.colorScheme.secondaryContainer) else Modifier,
@@ -157,7 +176,7 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.width(8.dp))
         Box {
             RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
             AppMenu(expanded = newOpen, onDismiss = { newOpen = false }) {
