@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed-icon version (Android 13+): single colour, eyes cut out. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4" android:strokeLineCap="round" android:pathData="M54,31 L54,39" />
+    <path android:fillColor="#FFFFFF" android:pathData="M54,24.5 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
+    <path android:fillColor="#FFFFFF" android:fillType="evenOdd"
+        android:pathData="M44,39 L64,39 A14,14 0 0 1 78,53 L78,63 A14,14 0 0 1 64,77 L44,77 A14,14 0 0 1 30,63 L30,53 A14,14 0 0 1 44,39 Z M40,52 a4,4 0 0 1 8,0 l0,8 a4,4 0 0 1 -8,0 Z M60,52 a4,4 0 0 1 8,0 l0,8 a4,4 0 0 1 -8,0 Z" />
+</vector>

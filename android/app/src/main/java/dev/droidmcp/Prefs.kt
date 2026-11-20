@@ -57,7 +57,7 @@ object Prefs {
 
     /** Island look and placement. position: left | center | right | custom (custom uses x/y). */
     data class IslandStyle(
-        val position: String = "center",
+        val position: String = "right",
         val x: Int = 0,
         val y: Int = -1,
         val locked: Boolean = true,
@@ -68,7 +68,7 @@ object Prefs {
 
     fun islandStyle(c: Context) = p(c).let {
         IslandStyle(
-            it.getString("island_pos", "center")!!, it.getInt("island_x", 0), it.getInt("island_y", -1),
+            it.getString("island_pos", "right")!!, it.getInt("island_x", 0), it.getInt("island_y", -1),
             it.getBoolean("island_locked", true), it.getInt("island_size", 1),
             it.getFloat("island_opacity", 0.92f), it.getBoolean("island_hide_idle", false),
         )
@@ -103,17 +103,59 @@ object Prefs {
 /** One AI action, for the activity feed. */
 data class AiEvent(val time: Long, val tool: String, val text: String, val ok: Boolean?)
 
-/** In-memory recent activity shown in the app. */
+/**
+ * AI activity, kept for 30 days in filesDir/activity.jsonl (one JSON object per line, append-only).
+ * Older entries are dropped when the app starts.
+ */
 object ActivityLog {
+    private const val KEEP_MS = 30L * 24 * 60 * 60 * 1000
+    private const val MAX_IN_MEMORY = 20_000
     private val events = ArrayDeque<AiEvent>()
+    private var file: java.io.File? = null
+
+    @Synchronized fun init(ctx: android.content.Context) {
+        if (file != null) return
+        val f = java.io.File(ctx.filesDir, "activity.jsonl")
+        file = f
+        if (!f.exists()) return
+        val cutoff = System.currentTimeMillis() - KEEP_MS
+        val kept = ArrayList<AiEvent>()
+        var dropped = false
+        try {
+            f.forEachLine { line ->
+                try {
+                    val o = org.json.JSONObject(line)
+                    val e = AiEvent(o.getLong("t"), o.getString("tool"), o.optString("text"),
+                        if (o.has("ok")) o.getBoolean("ok") else null)
+                    if (e.time >= cutoff) kept += e else dropped = true
+                } catch (_: Exception) { dropped = true }
+            }
+        } catch (_: Exception) {}
+        kept.sortByDescending { it.time }
+        kept.take(MAX_IN_MEMORY).forEach { events.addLast(it) }
+        // Rewrite without expired or broken lines.
+        if (dropped || kept.size > MAX_IN_MEMORY) {
+            try { f.writeText(events.reversed().joinToString("") { toLine(it) }) } catch (_: Exception) {}
+        }
+    }
+
+    private fun toLine(e: AiEvent) = org.json.JSONObject().put("t", e.time).put("tool", e.tool).put("text", e.text)
+        .apply { e.ok?.let { put("ok", it) } }.toString() + "\n"
 
     @Synchronized fun event(e: AiEvent) {
         events.addFirst(e)
-        while (events.size > 50) events.removeLast()
+        while (events.size > MAX_IN_MEMORY) events.removeLast()
+        try { file?.appendText(toLine(e)) } catch (_: Exception) {}
         listener?.invoke()
     }
 
     @Synchronized fun events(): List<AiEvent> = events.toList()
+
+    @Synchronized fun clear() {
+        events.clear()
+        try { file?.delete() } catch (_: Exception) {}
+        listener?.invoke()
+    }
 
     private val lines = ArrayDeque<String>()
     var listener: (() -> Unit)? = null
@@ -134,4 +176,7 @@ object Status {
     @Volatile var local = "off"
     @Volatile var root = "not checked"
     @Volatile var error: String? = null
+    @Volatile var startedAt: Long = 0
+    /** The tool call in progress right now (for the Home "Now" card), or null. */
+    @Volatile var current: String? = null
 }

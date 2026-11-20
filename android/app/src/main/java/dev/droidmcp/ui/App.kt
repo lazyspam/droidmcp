@@ -83,7 +83,7 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
             .let { if (Tab.entries[tab] == Tab.TERMINAL) it.imePadding() else it }) {
             when (Tab.entries[tab]) {
-                Tab.HOME -> HomeScreen(state, onStart, onStop) { tab = Tab.ACTIVITY.ordinal }
+                Tab.HOME -> HomeScreen(state, snackbar, onStart, onStop) { tab = Tab.ACTIVITY.ordinal }
                 Tab.ACTIVITY -> ActivityScreen(state)
                 Tab.TERMINAL -> TerminalScreen()
                 Tab.SETTINGS -> SettingsScreen(state, onRestart)

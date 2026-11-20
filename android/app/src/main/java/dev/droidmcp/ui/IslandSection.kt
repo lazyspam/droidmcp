@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,7 +62,7 @@ fun IslandSection(state: AppState) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Island", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(start = 8.dp))
-        Text("A small pill at the top of your screen that shows what your AI is doing, live.",
+        Text("A chat bubble on the edge of your screen that tells you what your AI is doing, live.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 8.dp))
 
@@ -88,28 +89,21 @@ fun IslandSection(state: AppState) {
 
         Card(shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp)) {
-                Label("Position")
-                val positions = listOf("left" to "Left", "center" to "Center", "right" to "Right")
+                Label("Side")
+                val positions = listOf("left" to "Left edge", "right" to "Right edge")
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     positions.forEachIndexed { i, (key, name) ->
                         SegmentedButton(
-                            selected = style.position == key,
+                            selected = (if (style.position == "left") "left" else "right") == key,
                             onClick = { update(style.copy(position = key, y = -1)) },
                             shape = SegmentedButtonDefaults.itemShape(i, positions.size),
                         ) { Text(name) }
                     }
                 }
-                if (style.position == "custom") {
-                    Text("Custom spot (dragged)", style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
-                }
-                Spacer(Modifier.height(10.dp))
-                SwitchRow(
-                    "Lock position",
-                    if (style.locked) "Touches pass through the island" else "Drag the island on your screen to place it, then lock",
-                    style.locked, padded = false,
-                ) { update(style.copy(locked = it)) }
 
+                Text("Drag the bubble anywhere on your screen; it snaps to the nearest edge. Tap it to open DroidMCP.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp))
                 Spacer(Modifier.height(16.dp))
                 Label("Size")
                 val sizes = listOf("Small", "Medium", "Large")
@@ -128,7 +122,7 @@ fun IslandSection(state: AppState) {
                     value = style.opacity, onValueChange = { style = style.copy(opacity = it) },
                     onValueChangeFinished = { update(style) }, valueRange = 0.4f..1f,
                 )
-                SwitchRow("Hide when idle", "Only appears while the AI is acting", style.hideWhenIdle, padded = false) {
+                SwitchRow("Hide when idle", "Only appears while the AI is acting (you can't drag it while hidden)", style.hideWhenIdle, padded = false) {
                     update(style.copy(hideWhenIdle = it))
                 }
             }
@@ -142,36 +136,43 @@ fun IslandSection(state: AppState) {
 /** A tiny phone mock that mirrors the settings, so changes are visible before looking at the real screen. */
 @Composable
 private fun PhonePreview(style: Prefs.IslandStyle, enabled: Boolean) {
-    val scale = when (style.size) { 0 -> 0.85f; 2 -> 1.2f; else -> 1f }
+    val bubble = when (style.size) { 0 -> 34; 2 -> 48; else -> 40 }
+    val left = style.position == "left"
     Box(
-        Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(28.dp))
-            .background(Color(0xFF101012)).padding(horizontal = 14.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().height(170.dp).clip(RoundedCornerShape(28.dp))
+            .background(Color(0xFF101012)).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("9:41", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
-            Text("▂▄▆  100%", color = Color.White, fontSize = 11.sp)
+            Text("100%", color = Color.White, fontSize = 11.sp)
         }
-        Box(Modifier.align(Alignment.TopCenter).padding(top = 4.dp).size(10.dp).clip(CircleShape).background(Color(0xFF2C2C2E)))
         if (enabled) {
-            val align = when (style.position) {
-                "left" -> Alignment.TopStart
-                "right" -> Alignment.TopEnd
-                else -> Alignment.TopCenter
-            }
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.align(align).padding(top = 26.dp).alpha(style.opacity)
-                    .clip(RoundedCornerShape(50)).background(Color.Black)
-                    .padding(horizontal = (10 * scale).dp, vertical = (6 * scale).dp),
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.align(if (left) Alignment.CenterStart else Alignment.CenterEnd).alpha(style.opacity),
             ) {
-                Box(Modifier.size((8 * scale).dp).clip(CircleShape).background(StatusColors.busy))
-                Spacer(Modifier.width((8 * scale).dp))
-                Text("Tap 540, 1200", color = Color.White, fontSize = (12 * scale).sp)
+                val balloon = @Composable {
+                    Text(
+                        "Tap 540, 1200", color = Color.White, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp)
+                            .clip(if (left) RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp) else RoundedCornerShape(16.dp, 4.dp, 16.dp, 16.dp))
+                            .background(Color(0xFF2C2C2E)).padding(horizontal = 12.dp, vertical = 7.dp),
+                    )
+                }
+                val head = @Composable {
+                    Box(Modifier.size(bubble.dp).clip(CircleShape).background(Color(0xFF1C1C1E)), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(bubble.dp).clip(CircleShape).background(Color.Transparent)
+                            .border(2.5.dp, StatusColors.busy, CircleShape))
+                        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(dev.droidmcp.R.drawable.ic_logo_mark),
+                            null, Modifier.size((bubble * 0.92).dp))
+                    }
+                }
+                if (left) { head(); Spacer(Modifier.width(6.dp)); balloon() } else { balloon(); Spacer(Modifier.width(6.dp)); head() }
             }
         }
         Text(
-            if (style.locked) "Locked" else "Unlocked: drag it on your real screen",
+            "Drag it on your real screen",
             color = Color(0xFF8E8E93), fontSize = 11.sp, modifier = Modifier.align(Alignment.BottomCenter),
         )
     }

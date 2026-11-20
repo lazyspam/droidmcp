@@ -99,6 +99,8 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     Log.i(TAG, "tool call: $name")
                     ActivityLog.add("$name ${args.toString().take(200)}")
                     Island.start(name, args)
+                    Status.current = Island.describe(name, args)
+                    ActivityLog.listener?.invoke()
                     var ok = false
                     try {
                         val r = tools.call(name, args)
@@ -106,6 +108,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         result(id, r)
                     } finally {
                         Island.finish(name, ok)
+                        Status.current = null
                         ActivityLog.event(AiEvent(System.currentTimeMillis(), name, Island.describe(name, args), ok))
                     }
                 }
@@ -140,4 +143,4 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     }
 }
 
-object BuildInfo { const val VERSION = "0.6.3" }
+object BuildInfo { const val VERSION = "0.8.0" }

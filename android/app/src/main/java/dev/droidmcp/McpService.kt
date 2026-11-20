@@ -54,6 +54,7 @@ class McpService : Service() {
     private fun startServers() {
         Status.running = true
         Status.error = null
+        Status.startedAt = System.currentTimeMillis()
         val mcp = Mcp(this, Tools(this))
 
         wake = (getSystemService(POWER_SERVICE) as PowerManager)

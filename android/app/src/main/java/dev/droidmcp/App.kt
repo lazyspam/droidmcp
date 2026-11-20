@@ -8,6 +8,7 @@ import java.io.File
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+        ActivityLog.init(this)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, e ->
             try {

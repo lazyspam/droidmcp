@@ -38,6 +38,9 @@ data class UiSnapshot(
     val files: Boolean = false,
     val overlay: Boolean = false,
     val crash: String? = null,
+    val startedAt: Long = 0,
+    val now: String? = null,
+    val model: String = "",
 ) {
     val connected get() = running && relay == "connected"
     val connecting get() = running && !connected && publicUrl != null
@@ -67,6 +70,9 @@ class AppState(private val ctx: Context) {
                 else ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED,
             overlay = Settings.canDrawOverlays(ctx),
             crash = if (crashFile.exists()) runCatching { crashFile.readText().take(3000) }.getOrNull() else null,
+            startedAt = Status.startedAt,
+            now = Status.current,
+            model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
         )
     }
 
