@@ -22,7 +22,7 @@
         android:label="DroidMCP"
         android:icon="@android:drawable/ic_menu_manage"
         android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.DeviceDefault"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
         android:requestLegacyExternalStorage="true">
 
         <activity android:name=".MainActivity" android:exported="true">

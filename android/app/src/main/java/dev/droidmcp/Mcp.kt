@@ -106,6 +106,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         result(id, r)
                     } finally {
                         Island.finish(name, ok)
+                        ActivityLog.event(AiEvent(System.currentTimeMillis(), name, Island.describe(name, args), ok))
                     }
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))
@@ -139,4 +140,4 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     }
 }
 
-object BuildInfo { const val VERSION = "0.5.0" }
+object BuildInfo { const val VERSION = "0.6.1" }

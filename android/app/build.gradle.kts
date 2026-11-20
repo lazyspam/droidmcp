@@ -1,23 +1,26 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "dev.droidmcp"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.iputobject.droidmcp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.5.0"
+        versionCode = 10
+        versionName = "0.6.1"
     }
 
     // proot ships as lib*.so: it must be extracted to nativeLibraryDir, the only place apps may execute files from.
     packaging {
         jniLibs { useLegacyPackaging = true }
     }
+
+    buildFeatures { compose = true }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -48,6 +51,13 @@ android {
 }
 
 dependencies {
+    implementation(platform("androidx.compose:compose-bom:2026.09.00"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.foundation:foundation")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("com.github.termux.termux-app:terminal-view:v0.118.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 }

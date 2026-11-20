@@ -111,6 +111,12 @@ class LinuxEnv(private val ctx: Context) {
 
     /** Runs a shell command inside Alpine. */
     fun run(command: String, timeoutSec: Long): ShellResult {
+        val (argv, env) = invocation(command)
+        return Shell.exec(argv, env, timeoutSec, removeEnv = listOf("LD_PRELOAD"))
+    }
+
+    /** The proot command line and environment that run [command] inside Alpine. */
+    fun invocation(command: String, workdir: String = "/root"): Pair<List<String>, Map<String, String>> {
         tmp.mkdirs()
         val argv = mutableListOf(
             File(nativeDir, "libproot.so").path,
@@ -123,7 +129,7 @@ class LinuxEnv(private val ctx: Context) {
         // Share phone storage when the app can see it.
         for (p in listOf("/sdcard", "/storage")) if (File(p).exists()) argv += listOf("-b", p)
         argv += listOf(
-            "-w", "/root",
+            "-w", workdir,
             "/usr/bin/env", "-i",
             "HOME=/root", "USER=root", "LANG=C.UTF-8", "TERM=xterm-256color",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -136,7 +142,7 @@ class LinuxEnv(private val ctx: Context) {
             "LD_LIBRARY_PATH" to nativeDir.path,
         )
         File(nativeDir, "libproot-loader32.so").takeIf { it.exists() }?.let { env["PROOT_LOADER_32"] = it.path }
-        return Shell.exec(argv, env, timeoutSec, removeEnv = listOf("LD_PRELOAD"))
+        return argv to env
     }
 
     private fun get(http: OkHttpClient, url: String): InputStream {

@@ -55,6 +55,34 @@ object Prefs {
     fun island(c: Context) = p(c).getBoolean("island", true)
     fun setIsland(c: Context, on: Boolean) = p(c).edit().putBoolean("island", on).apply()
 
+    /** Island look and placement. position: left | center | right | custom (custom uses x/y). */
+    data class IslandStyle(
+        val position: String = "center",
+        val x: Int = 0,
+        val y: Int = -1,
+        val locked: Boolean = true,
+        val size: Int = 1,            // 0 small, 1 medium, 2 large
+        val opacity: Float = 0.92f,
+        val hideWhenIdle: Boolean = false,
+    )
+
+    fun islandStyle(c: Context) = p(c).let {
+        IslandStyle(
+            it.getString("island_pos", "center")!!, it.getInt("island_x", 0), it.getInt("island_y", -1),
+            it.getBoolean("island_locked", true), it.getInt("island_size", 1),
+            it.getFloat("island_opacity", 0.92f), it.getBoolean("island_hide_idle", false),
+        )
+    }
+
+    fun setIslandStyle(c: Context, s: IslandStyle) = p(c).edit()
+        .putString("island_pos", s.position).putInt("island_x", s.x).putInt("island_y", s.y)
+        .putBoolean("island_locked", s.locked).putInt("island_size", s.size)
+        .putFloat("island_opacity", s.opacity).putBoolean("island_hide_idle", s.hideWhenIdle)
+        .apply()
+
+    fun terminalLinux(c: Context) = p(c).getBoolean("term_linux", true)
+    fun setTerminalLinux(c: Context, on: Boolean) = p(c).edit().putBoolean("term_linux", on).apply()
+
     fun save(
         c: Context, relayUrl: String, agentKey: String, deviceName: String,
         localEnabled: Boolean, localPort: Int, allowShell: Boolean, autostart: Boolean,
@@ -72,8 +100,21 @@ object Prefs {
     }
 }
 
+/** One AI action, for the activity feed. */
+data class AiEvent(val time: Long, val tool: String, val text: String, val ok: Boolean?)
+
 /** In-memory recent activity shown in the app. */
 object ActivityLog {
+    private val events = ArrayDeque<AiEvent>()
+
+    @Synchronized fun event(e: AiEvent) {
+        events.addFirst(e)
+        while (events.size > 50) events.removeLast()
+        listener?.invoke()
+    }
+
+    @Synchronized fun events(): List<AiEvent> = events.toList()
+
     private val lines = ArrayDeque<String>()
     var listener: (() -> Unit)? = null
 
