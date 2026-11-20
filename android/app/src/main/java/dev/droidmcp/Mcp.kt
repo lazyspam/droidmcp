@@ -98,7 +98,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         .put("protocolVersion", if (asked in supportedVersions) asked else supportedVersions.first())
                         .put("capabilities", JSONObject().put("tools", JSONObject().put("listChanged", false)))
                         .put("serverInfo", JSONObject().put("name", "droid-mcp").put("version", BuildInfo.VERSION))
-                        .put("instructions", INSTRUCTIONS))
+                        .put("instructions", instructions(ctx)))
                 }
                 "ping" -> result(id, JSONObject())
                 "tools/list" -> result(id, JSONObject().put("tools", tools.definitions()))
@@ -181,12 +181,27 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
 
     companion object {
         const val TAG = "DroidMCP"
-        const val INSTRUCTIONS =
-            "You control a rooted Android phone. Typical loop: screenshot or ui_tree to see the screen, " +
-                "then tap/swipe/type_text/key to act, then look again. ui_tree gives exact tap coordinates. " +
-                "shell runs as root and can do anything else (pm, am, settings, svc, content, dumpsys, cmd). " +
-                "linux_exec runs commands in a full Alpine Linux (apk packages: python, git, node, gcc, …) without needing root."
+        /** What the AI is told on connect, based on what this phone can actually do right now. */
+        fun instructions(ctx: android.content.Context): String {
+            val root = Shell.rootState ?: Shell.hasRoot()
+            val loop = "Typical loop: screenshot or ui_tree to see the screen, then tap/swipe/type_text/key to act, then look " +
+                "again. ui_tree gives exact tap coordinates. linux_exec runs commands in Alpine or Ubuntu inside the app " +
+                "(no root needed), in a shared terminal the user can watch."
+            if (root) {
+                return "You control an Android phone with root access. $loop shell runs as root and can do anything else " +
+                    "(pm, am, settings, svc, content, dumpsys, cmd)."
+            }
+            val missing = buildList {
+                if (DroidAccessibility.instance == null) add("screen and input tools (the user hasn't enabled DroidMCP's accessibility service)")
+                if (!NotifListener.enabled(ctx)) add("notifications (notification access not granted)")
+            }
+            return "You control an Android phone WITHOUT root. $loop Screen, input and keys go through Android's accessibility " +
+                "service; only HOME, BACK, RECENTS, NOTIFICATION, POWER, LOCK and ENTER keys work. shell runs as the app, not root, " +
+                "so system commands and other apps' data are off limits. read_file/write_file reach shared storage (/sdcard) only." +
+                if (missing.isEmpty()) "" else " Not available until the user allows it: ${missing.joinToString("; ")}. " +
+                    "If a tool says so, ask the user to finish setup in the DroidMCP app."
+        }
     }
 }
 
-object BuildInfo { const val VERSION = "0.13.4" }
+object BuildInfo { const val VERSION = "0.13.5" }
