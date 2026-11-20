@@ -165,7 +165,7 @@ private fun Header(ui: UiSnapshot) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("DroidMCP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("${ui.model} · ${ui.deviceId}", style = MaterialTheme.typography.bodySmall,
+            Text(ui.model, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (ui.running) Chip(if (ui.root) "Root" else "No root", if (ui.root) StatusColors.live else StatusColors.warn)
@@ -355,7 +355,7 @@ private fun ConnectCard(state: AppState) {
                     CopyRow("URL", ui.publicUrl ?: "–") { ui.publicUrl?.let { state.copy("url", it) } }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) {
-                            CopyRow("Token", if (reveal) ui.token else "•".repeat(12) + ui.token.takeLast(4)) { state.copy("token", ui.token) }
+                            CopyRow("Token", if (reveal) ui.token else "•".repeat(16)) { state.copy("token", ui.token) }
                         }
                         TextButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide" else "Show") }
                     }
