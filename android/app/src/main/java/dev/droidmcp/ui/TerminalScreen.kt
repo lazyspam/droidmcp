@@ -222,7 +222,7 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
                     moreOpen = false; tab?.session?.onPasteTextFromClipboard()
                 })
                 AppMenuItem(text = { Text("Clear screen") }, enabled = tab != null, onClick = {
-                    moreOpen = false; tab?.session?.write("clear\n")
+                    moreOpen = false; tab?.let { Terminals.clear(it) }
                 })
                 AppMenuItem(text = { Text("Bigger text") }, onClick = { moreOpen = false; TermFont.change(+2) })
                 AppMenuItem(text = { Text("Smaller text") }, onClick = { moreOpen = false; TermFont.change(-2) })

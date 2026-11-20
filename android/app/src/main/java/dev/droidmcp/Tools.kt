@@ -708,7 +708,7 @@ class Tools(private val ctx: Context) {
                 throw InvalidParams("Argument 'content' is not valid base64.")
             }
         } else content.toByteArray()
-        val tmp = File.createTempFile("w", ".tmp", ctx.cacheDir)
+        val tmp = File.createTempFile("dmcp-write", ".tmp", ctx.cacheDir) // prefix must be 3+ chars
         try {
             tmp.writeBytes(bytes)
             val q = Shell.q(path)

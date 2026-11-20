@@ -110,6 +110,20 @@ object Terminals {
         return tab
     }
 
+    /**
+     * Clears the session completely: the screen and all scrollback, which is also what terminal_read sees.
+     * Nothing is typed into the shell except Ctrl+L, so a running program never receives a stray "clear" command;
+     * shells redraw their prompt on Ctrl+L and full-screen programs repaint.
+     */
+    fun clear(tab: TermTab) {
+        val emulator = tab.session.emulator ?: return
+        val home = "\u001b[H\u001b[2J".toByteArray() // cursor home, erase screen
+        emulator.append(home, home.size)
+        emulator.screen.clearTranscript()
+        tab.session.write("\u000c")
+        onScreenUpdate?.invoke()
+    }
+
     fun close(tab: TermTab) {
         tab.session.finishIfRunning()
         val i = tabs.indexOf(tab)
@@ -117,6 +131,12 @@ object Terminals {
         if (current >= tabs.size) current = (tabs.size - 1).coerceAtLeast(0)
         else if (i < current) current--
     }
+
+    /**
+     * `clear` from busybox and toybox only wipes the visible screen (ESC[H ESC[J / ESC[2J), so anything scrolled
+     * up stayed. ESC[3J also erases the scrollback, like `clear` does in desktop terminals.
+     */
+    private const val CLEAR_FN = "clear() { command clear \"\$@\"; printf '\\033[3J'; }\n"
 
     private fun welcome(d: dev.droidmcp.Distro): String {
         val pm = if (d == dev.droidmcp.Distro.UBUNTU) "apt install <package>" else "apk add <package>"
@@ -136,6 +156,7 @@ object Terminals {
                 "export PS1='\\[\\033[38;5;75m\\]\\w\\[\\033[0m\\] \\$ '\n" +
                 "export HISTCONTROL=ignorespace\n" +
                 "alias ls='ls --color=auto'\nalias ll='ls -la'\n" +
+                CLEAR_FN +
                 // The AI helper is bash-only; plain sh never parses it.
                 "[ -n \"\$BASH_VERSION\" ] && . /root/.droidmcp_ai.sh\n"
         )
@@ -162,12 +183,14 @@ object Terminals {
 
     private fun androidSession(ctx: Context): TerminalSession {
         val root = Shell.rootState == true
+        // Read by interactive mksh through $ENV (su passes the environment on).
+        val rc = File(ctx.filesDir, "android_rc").apply { writeText(CLEAR_FN) }
         val shell = if (root) "/system/bin/su" else "/system/bin/sh"
         val home = if (File("/sdcard").canRead()) "/sdcard" else ctx.filesDir.path
         val env = arrayOf(
             "PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
             "HOME=$home", "TERM=xterm-256color", "TMPDIR=${ctx.cacheDir.path}",
-            "ANDROID_DATA=/data", "ANDROID_ROOT=/system",
+            "ANDROID_DATA=/data", "ANDROID_ROOT=/system", "ENV=${rc.path}",
         )
         val argv = if (root) Shell.suArgv().toTypedArray() else arrayOf("sh")
         return TerminalSession(shell, home, argv, env, 5000, client(ctx))
