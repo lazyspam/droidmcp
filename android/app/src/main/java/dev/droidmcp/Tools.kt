@@ -99,6 +99,13 @@ class Tools(private val ctx: Context) {
         return LinuxEnv(ctx, d)
     }
     @Volatile private var screenSize: Pair<Int, Int>? = null
+    /** Where the last shell call ended; the next one starts there. */
+    @Volatile private var shellCwd: String? = null
+    /** Folders whose project summary was already sent this session. */
+    private val seenProjects: MutableSet<String> = java.util.Collections.synchronizedSet(HashSet())
+    /** A path inside the default Linux distro, as the root shell sees it. */
+    private fun linuxPath(p: String): String =
+        java.io.File(LinuxEnv(ctx, Prefs.defaultDistro(ctx)).rootfs, p.trimStart('/')).path
 
     private val tools = listOf(
         Tool("device_info", "Model, Android version, battery, screen size, IP addresses, storage, uptime, root status.",
@@ -107,9 +114,13 @@ class Tools(private val ctx: Context) {
             "Run a shell command on the phone (as root when the phone is rooted, otherwise as the app). Use it for anything not covered by another tool, e.g. " +
                 "`svc wifi enable`, `settings put system screen_brightness 100`, `pm install /sdcard/x.apk`, " +
                 "`am start -a android.intent.action.CALL -d tel:123`, `content query --uri content://contacts/phones`, " +
-                "`dumpsys battery`, `cmd location set-location-enabled true`, `reboot`.",
+                "`dumpsys battery`, `cmd location set-location-enabled true`, `reboot`. The working directory persists " +
+                "between calls (a `cd` sticks, or pass cwd once), so don't prefix every command with `cd …`. Entering a " +
+                "project folder for the first time replies with its type, build/run commands and its AGENTS.md.",
             schema(
                 "command" to prop("string", "Shell command or script"),
+                "cwd" to prop("string", "Directory to run in; remembered for later calls (default: where the last call ended, " +
+                    "initially /). Use linux:/path for a path inside the default Linux distro, e.g. linux:/root/myproject."),
                 "root" to prop("boolean", "Run as root (default: true if the phone is rooted)"),
                 "timeout_sec" to prop("integer", "Timeout in seconds (default 30, max 600)"),
                 required = listOf("command"),
@@ -117,8 +128,20 @@ class Tools(private val ctx: Context) {
             val cmd = a.str("command")
             if (cmd.isBlank()) throw InvalidParams("Argument 'command' is empty.")
             val timeout = a.int("timeout_sec", 30, 1..600)
-            val r = Shell.run(cmd, a.bool("root", root()), timeout.toLong())
+            val asRoot = a.bool("root", root())
+            val asked = a.str("cwd", "").trim().let { if (it.startsWith("linux:")) linuxPath(it.removePrefix("linux:")) else it }
+            val start = asked.ifEmpty { shellCwd }
+            val r = Shell.run(Workdir.wrap(cmd, start), asRoot, timeout.toLong())
+            val (stderr, endDir) = Workdir.unwrap(r.stderr)
+            if (endDir != null) shellCwd = endDir else if (asked.isNotEmpty() && r.exitCode == 0) shellCwd = asked
             val sb = StringBuilder()
+            shellCwd?.let { dir ->
+                sb.append("cwd: $dir\n")
+                if (dir != "/" && seenProjects.add(dir)) {
+                    runCatching { Workdir.describe(dir, Shell.run(Workdir.probeScript(dir), asRoot, 20).out) }
+                        .getOrNull()?.let { sb.append(it) }
+                }
+            }
             sb.append("exit_code: ${r.exitCode}")
             if (r.timedOut) sb.append(" (killed after ${timeout}s timeout; raise timeout_sec or run it in the background with `nohup … &`)")
             sb.append('\n')
@@ -127,8 +150,8 @@ class Tools(private val ctx: Context) {
                 if (r.out.length > 100_000 || r.truncated) sb.append("\n[stdout truncated; redirect to a file and use read_file]")
                 sb.append('\n')
             }
-            if (r.stderr.isNotEmpty()) sb.append("stderr:\n").append(r.stderr.take(20_000))
-            if (r.out.isEmpty() && r.stderr.isEmpty()) sb.append("(no output)")
+            if (stderr.isNotEmpty()) sb.append("stderr:\n").append(stderr.take(20_000))
+            if (r.out.isEmpty() && stderr.isEmpty()) sb.append("(no output)")
             text(sb.toString(), isError = r.exitCode != 0)
         },
         Tool("linux_exec",
@@ -142,11 +165,15 @@ class Tools(private val ctx: Context) {
                 "session" to prop("boolean", "Run in the shared, visible AI terminal (default true): state like cd/env/venv " +
                     "persists between calls and the user can watch, answer prompts or Ctrl+C. false = a fresh separate shell " +
                     "(use for parallel or background work)."),
+                "cwd" to prop("string", "Directory to run in, e.g. /root/myproject. In the shared terminal it stays " +
+                    "the current directory for later calls; entering a project folder the first time replies with its type, " +
+                    "build/run commands and its AGENTS.md."),
                 "timeout_sec" to prop("integer", "Timeout in seconds (default 120, max 1800)"),
                 required = listOf("command"),
             )) { a ->
-            val cmd = a.str("command")
-            if (cmd.isBlank()) throw InvalidParams("Argument 'command' is empty.")
+            val dir = a.str("cwd", "").trim()
+            val cmd = a.str("command").let { if (dir.isEmpty()) it else "cd -- ${Shell.q(dir)} && $it" }
+            if (a.str("command").isBlank()) throw InvalidParams("Argument 'command' is empty.")
             val env = linuxFor(a)
             val timeout = a.int("timeout_sec", 120, 1..1800)
             val setupNote = if (!env.installed) env.setup { ActivityLog.add("${env.distro.id}: $it") } + "\n" else ""
@@ -163,6 +190,9 @@ class Tools(private val ctx: Context) {
                 }
             } else env.run(cmd, timeout.toLong())
             val sb = StringBuilder(setupNote).append(note)
+            if (dir.isNotEmpty() && r.exitCode == 0 && seenProjects.add("${env.distro.id}:$dir")) {
+                runCatching { Workdir.describe(dir, env.run(Workdir.probeScript(dir), 30).out) }.getOrNull()?.let { sb.append(it) }
+            }
             sb.append("[${env.distro.label}${if (shared) ", AI terminal" else ""}] exit_code: ${r.exitCode}")
             if (r.timedOut) sb.append(" (killed after ${timeout}s timeout; raise timeout_sec)")
             sb.append('\n')

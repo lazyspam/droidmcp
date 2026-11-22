@@ -186,7 +186,8 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             val root = Shell.rootState ?: Shell.hasRoot()
             val loop = "Typical loop: screenshot or ui_tree to see the screen, then tap/swipe/type_text/key to act, then look " +
                 "again. ui_tree gives exact tap coordinates. linux_exec runs commands in Alpine or Ubuntu inside the app " +
-                "(no root needed), in a shared terminal the user can watch."
+                "(no root needed), in a shared terminal the user can watch. shell and linux_exec keep their working directory " +
+                "between calls: set cwd once instead of starting every command with `cd …`."
             if (root) {
                 return "You control an Android phone with root access. $loop shell runs as root and can do anything else " +
                     "(pm, am, settings, svc, content, dumpsys, cmd)."
