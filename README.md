@@ -68,31 +68,6 @@ The phone connects *out* to the relay, so it works on mobile data and behind any
 | `shell` | The phone's own shell (root when available) |
 | `device_info` | Model, Android version, battery, screen, network, root status |
 
-### Scripts: many steps in one call (beta)
-
-Every step of a typical task (look, tap, look again) is a round trip through the AI. Inside the app's Linux, every
-tool is also scriptable, so the AI can write one script that does the whole sequence and returns only the answer:
-
-```bash
-droid launch_app package=com.android.settings
-droid ui_tree | grep -i battery
-droid tap x=540 y=1200
-```
-
-```python
-import droid                                   # Python, from any script in Alpine or Ubuntu
-droid.launch_app(package="com.android.settings")
-droid.tap_on(text="Battery", timeout=5)        # find in ui_tree and tap
-print(droid.wait_for(text="%").text)           # poll until it appears
-```
-
-```js
-const droid = require("droid")                 // Node: require or import, from any folder
-await droid.tap_on({ text: "Battery", timeout: 5 })
-```
-
-`droid help` lists the whole API. The AI is told about it when it connects, and its scripts run through `linux_exec`.
-
 ## Root or no root
 
 | | With root | Without root |
@@ -134,13 +109,6 @@ cd relay-cloudflare
 npx wrangler deploy                 # prints your relay URL
 npx wrangler secret put AGENT_KEY   # optional: makes the relay private
 ```
-
-**Code mode (beta, Workers Paid):** a Cloudflare relay can also serve `https://<relay>/d/<device-id>/code/mcp`.
-On that URL the AI gets one `execute` tool and writes JavaScript against typed phone tools (`await droid.tap_on({ text: "OK" })`).
-The code runs on the relay in a sandboxed [Dynamic Worker](https://developers.cloudflare.com/dynamic-workers/) with no network access,
-and only its result goes back to the AI. Dynamic Workers need the Workers Paid plan, so it's off by default: uncomment `worker_loaders`
-in `relay-cloudflare/wrangler.jsonc` and deploy. Unique snippets count toward Cloudflare's Dynamic Worker pricing.
-Connect your client to the `/code/mcp` URL instead of `/mcp`, with the same token.
 
 **Node / Docker** (any server):
 

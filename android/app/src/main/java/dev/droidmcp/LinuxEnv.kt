@@ -180,8 +180,6 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
     /** The proot command line and environment that run [command] inside Alpine. */
     fun invocation(command: String, workdir: String = "/root"): Pair<List<String>, Map<String, String>> {
         tmp.mkdirs()
-        // The `droid` command and libraries that let scripts call the phone's tools.
-        runCatching { ScriptApi.install(ctx, rootfs) }.onFailure { android.util.Log.w(Mcp.TAG, "script api install", it) }
         val argv = mutableListOf(
             File(nativeDir, "libproot.so").path,
             "--kill-on-exit",
@@ -201,7 +199,6 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
             "HOME=/root", "USER=root", "LANG=C.UTF-8", "TERM=xterm-256color",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "TMPDIR=/tmp",
-            "PYTHONPATH=/usr/local/lib/droidmcp",
             "/bin/sh", "-lc", command,
         )
         val env = mutableMapOf(

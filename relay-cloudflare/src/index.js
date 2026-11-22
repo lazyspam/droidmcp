@@ -10,14 +10,9 @@
 //     with a device ID claims it; later connections must present the same secret. Unused IDs are released
 //     after 90 days without a connection.
 //   - Optional AGENT_KEY secret makes the relay private: phones must also send X-Agent-Key.
-// Client auth: the phone checks the MCP client's bearer token itself.
-// Code mode (beta, /d/X/code/mcp, needs Workers Paid): see codemode.js.
+// Client auth: the phone checks the MCP client's bearer token itself. The relay never sees what tools do.
 
 import { DurableObject } from "cloudflare:workers";
-import { codeMode } from "./codemode.js";
-
-// ctx.exports.DroidApi is the binding code mode hands its sandbox.
-export { DroidApi } from "./codemode.js";
 
 const TIMEOUT_MS = 610_000; // longer than the phone's 600s max shell timeout
 const MAX_BODY = 50 * 1024 * 1024;
@@ -70,7 +65,7 @@ function hex(bytes) {
 }
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     try {
       const url = new URL(request.url);
 
@@ -114,7 +109,6 @@ export default {
       if (await ipLimited(env.CLIENT_LIMIT, request)) return fail(429, "Too many requests. Slow down.", "", { "Retry-After": "10" });
       const len = Number(request.headers.get("Content-Length") || 0);
       if (len > MAX_BODY) return fail(413, `Request body too large (max ${MAX_BODY / 1024 / 1024} MB).`);
-      if (m[2] === "/code" || m[2] === "/code/mcp") return await codeMode(request, env, ctx, m[1]);
       return env.DEVICE.get(env.DEVICE.idFromName(m[1])).fetch(request);
     } catch (e) {
       console.error("worker error", e);
