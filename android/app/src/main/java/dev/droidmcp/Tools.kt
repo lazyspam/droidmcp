@@ -158,7 +158,10 @@ class Tools(private val ctx: Context) {
             "Run a command in a full Linux environment on the phone (no root needed). distro: \"alpine\" (tiny; apk add …) or " +
                 "\"ubuntu\" (26.04, glibc: use it for prebuilt Linux software like official Node/Bun builds, Python wheels, " +
                 "VS Code server; apt install -y …). Defaults to the user's chosen distro. Home is /root; phone storage is at /sdcard. " +
-                "A distro is downloaded automatically on first use (Alpine ~3 MB, Ubuntu ~30 MB).",
+                "A distro is downloaded automatically on first use (Alpine ~3 MB, Ubuntu ~30 MB). Scripts here can call every " +
+                "phone tool, so one linux_exec can do a whole multi-step task: `droid tap x=540 y=1200`, `droid ui_tree`; " +
+                "Python `import droid; droid.tap_on(text=\"Send\")`; Node `const droid = require(\"droid\")`. " +
+                "`droid help` shows the API (ui() parsing, find, wait_for, tap_on).",
             schema(
                 "command" to prop("string", "Shell command or script"),
                 "distro" to prop("string", "alpine or ubuntu (default: the user's default)"),

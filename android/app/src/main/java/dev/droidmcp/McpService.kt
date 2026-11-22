@@ -85,6 +85,8 @@ class McpService : Service() {
             ActivityLog.listener?.invoke()
         }.start()
 
+        ScriptApi.start(this, mcp)
+
         if (Prefs.localEnabled(this)) {
             try {
                 local = LocalServer(Prefs.localPort(this), mcp).also { it.start(30_000, false) }
@@ -119,6 +121,7 @@ class McpService : Service() {
         relay = null
         try { local?.stop() } catch (e: Exception) { Log.w(Mcp.TAG, "local stop", e) }
         local = null
+        ScriptApi.stop()
         wake?.takeIf { it.isHeld }?.release()
         wifi?.takeIf { it.isHeld }?.release()
         Island.detach()

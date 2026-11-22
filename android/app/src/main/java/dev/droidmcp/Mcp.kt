@@ -118,31 +118,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         is JSONObject -> a
                         else -> return error(id, -32602, "Invalid params: 'arguments' must be an object.")
                     }
-                    Log.i(TAG, "tool call: $name")
-                    ActivityLog.add("$name ${args.toString().take(200)}")
-                    Island.start(name, args)
-                    Status.current = Island.describe(name, args)
-                    ActivityLog.listener?.invoke()
-                    var ok = false
-                    var summary = ""
-                    val started = System.currentTimeMillis()
-                    try {
-                        val r = tools.call(name, args)
-                        ok = !r.optBoolean("isError")
-                        summary = summarize(r)
-                        result(id, r)
-                    } catch (e: InvalidParams) {
-                        summary = "Invalid arguments: ${e.message}"
-                        throw e
-                    } catch (e: Throwable) {
-                        summary = "Internal error: ${e.message}"
-                        throw e
-                    } finally {
-                        Island.finish(name, ok)
-                        Status.current = null
-                        ActivityLog.event(AiEvent(started, name, Island.describe(name, args), ok,
-                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, Status.client))
-                    }
+                    result(id, runTool(name, args, client))
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))
                 "resources/templates/list" -> result(id, JSONObject().put("resourceTemplates", JSONArray()))
@@ -159,6 +135,41 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             error(id, -32603, "Internal error: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
+
+
+    /**
+     * Runs a tool with everything the user sees around it: the bubble, the status line and the activity log.
+     * Used by MCP calls and by scripts in Linux ([ScriptApi]). Throws [InvalidParams] for bad calls.
+     */
+    fun runTool(name: String, args: JSONObject, client: String = Status.client): JSONObject {
+        Log.i(TAG, "tool call: $name")
+        ActivityLog.add("$name ${args.toString().take(200)}")
+        Island.start(name, args)
+        Status.current = Island.describe(name, args)
+        ActivityLog.listener?.invoke()
+        var ok = false
+        var summary = ""
+        val started = System.currentTimeMillis()
+        try {
+            val r = tools.call(name, args)
+            ok = !r.optBoolean("isError")
+            summary = summarize(r)
+            return r
+        } catch (e: InvalidParams) {
+            summary = "Invalid arguments: ${e.message}"
+            throw e
+        } catch (e: Throwable) {
+            summary = "Internal error: ${e.message}"
+            throw e
+        } finally {
+            Island.finish(name, ok)
+            Status.current = null
+            ActivityLog.event(AiEvent(started, name, Island.describe(name, args), ok,
+                args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, client))
+        }
+    }
+
+    fun toolDefinitions(): JSONArray = tools.definitions()
 
     /** Text of a tool result for the activity log; images are noted, not stored. */
     private fun summarize(r: JSONObject): String {
@@ -187,7 +198,10 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             val loop = "Typical loop: screenshot or ui_tree to see the screen, then tap/swipe/type_text/key to act, then look " +
                 "again. ui_tree gives exact tap coordinates. linux_exec runs commands in Alpine or Ubuntu inside the app " +
                 "(no root needed), in a shared terminal the user can watch. shell and linux_exec keep their working directory " +
-                "between calls: set cwd once instead of starting every command with `cd …`."
+                "between calls: set cwd once instead of starting every command with `cd …`. To do many steps in one go (loops, " +
+                "waiting for something to appear, filtering a long ui_tree), write a script and run it with linux_exec: inside " +
+                "Linux every tool is callable from the `droid` command, Python (`import droid`) and Node (`require('droid')`); " +
+                "run `droid help` there for the API."
             if (root) {
                 return "You control an Android phone with root access. $loop shell runs as root and can do anything else " +
                     "(pm, am, settings, svc, content, dumpsys, cmd)."
