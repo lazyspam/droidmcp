@@ -8,7 +8,7 @@
 // Phone auth:
 //   - Every phone sends its own device secret (Authorization: Bearer <secret>). The first phone to connect
 //     with a device ID claims it; later connections must present the same secret. Unused IDs are released
-//     after CLAIM_TTL_DAYS without a connection.
+//     after 90 days without a connection.
 //   - Optional AGENT_KEY secret makes the relay private: phones must also send X-Agent-Key.
 // Client auth: the phone checks the MCP client's bearer token itself. The relay never sees what tools do.
 
@@ -22,6 +22,17 @@ const RETURN_HEADERS = /^(content-type|mcp-session-id|www-authenticate|allow|ret
 const DEVICE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const CLAIM_TTL_DAYS = 90;
 const RATE_PER_MIN = 240; // MCP requests per device per minute
+const BASE_HEADERS = { "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
+
+/**
+ * Per-IP limit using the rate limiter bindings in wrangler.jsonc (AGENT_LIMIT, CLIENT_LIMIT).
+ * A relay deployed without them just skips this check.
+ */
+async function ipLimited(limiter, request) {
+  if (!limiter) return false;
+  const { success } = await limiter.limit({ key: request.headers.get("CF-Connecting-IP") || "?" });
+  return !success;
+}
 
 function rpcId(body) {
   try {
@@ -36,7 +47,7 @@ function rpcId(body) {
 function fail(status, message, body = "", headers = {}) {
   return new Response(JSON.stringify({ jsonrpc: "2.0", id: rpcId(body), error: { code: -32000, message } }), {
     status,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { ...BASE_HEADERS, "Content-Type": "application/json", ...headers },
   });
 }
 
@@ -63,6 +74,9 @@ export default {
       }
 
       if (url.pathname === "/agent") {
+        if (await ipLimited(env.AGENT_LIMIT, request)) {
+          return new Response("Too many connection attempts. Retry in a minute.", { status: 429 });
+        }
         if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
           return new Response("Expected a WebSocket upgrade", { status: 426 });
         }
@@ -92,6 +106,7 @@ export default {
 
       const m = url.pathname.match(/^\/d\/([A-Za-z0-9_-]{1,64})(\/.*)?$/);
       if (!m) return fail(404, "Not found. MCP endpoints look like /d/<device>/mcp.");
+      if (await ipLimited(env.CLIENT_LIMIT, request)) return fail(429, "Too many requests. Slow down.", "", { "Retry-After": "10" });
       const len = Number(request.headers.get("Content-Length") || 0);
       if (len > MAX_BODY) return fail(413, `Request body too large (max ${MAX_BODY / 1024 / 1024} MB).`);
       return env.DEVICE.get(env.DEVICE.idFromName(m[1])).fetch(request);
@@ -175,7 +190,7 @@ export class Device extends DurableObject {
     });
 
     if (reply.error) return fail(reply.status, reply.error, body);
-    const out = new Headers({ "Content-Type": "application/json" });
+    const out = new Headers({ ...BASE_HEADERS, "Content-Type": "application/json" });
     for (const [k, v] of Object.entries(reply.headers || {})) {
       if (RETURN_HEADERS.test(k) && typeof v === "string") {
         try { out.set(k, v); } catch { /* invalid header value from phone: drop it */ }
