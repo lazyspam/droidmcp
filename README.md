@@ -98,7 +98,11 @@ See [SECURITY.md](SECURITY.md) for details. Only use DroidMCP on devices you own
 
 ## Run your own relay
 
-**Cloudflare Workers** (the free tier is enough):
+**Cloudflare Workers** (the free tier is enough). One click:
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/iput-object/droidmcp/tree/main/relay-cloudflare)
+
+Or from the command line:
 
 ```bash
 cd relay-cloudflare
