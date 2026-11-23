@@ -490,10 +490,11 @@ class Tools(private val ctx: Context) {
         val scaled = if (bmp.width > maxWidth) Bitmap.createScaledBitmap(bmp, maxWidth, bmp.height * maxWidth / bmp.width, true) else bmp
         val out = ByteArrayOutputStream()
         scaled.compress(Bitmap.CompressFormat.JPEG, 70, out)
+        // Read the size before recycling: a recycled bitmap's getters are undefined.
+        val sw = scaled.width; val sh = scaled.height
         if (scaled !== bmp) scaled.recycle()
         bmp.recycle()
         val data = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-        val sw = scaled.width; val sh = scaled.height
         return JSONObject().put("content", JSONArray()
             .put(JSONObject().put("type", "image").put("mimeType", "image/jpeg").put("data", data))
             .put(JSONObject().put("type", "text").put("text",
