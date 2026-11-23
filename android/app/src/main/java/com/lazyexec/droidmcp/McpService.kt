@@ -75,6 +75,7 @@ class McpService : Service() {
                     "appops set $packageName SYSTEM_ALERT_WINDOW allow; " +
                     "pm grant $packageName android.permission.POST_NOTIFICATIONS 2>/dev/null")
                 Status.root = "granted"
+                RootGrants.apply(this)
                 Island.attach(this)
             } catch (e: RootUnavailable) {
                 Status.root = "NOT available: ${e.message}"

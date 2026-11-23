@@ -34,7 +34,14 @@ object Shell {
 
     /** Last known root state: null = not checked yet. */
     @Volatile var rootState: Boolean? = null
-        private set
+        private set(v) {
+            val was = field
+            field = v
+            if (v == true && was != true) onRootGranted?.invoke()
+        }
+
+    /** Called (on the shell's thread) each time root becomes available. */
+    @Volatile var onRootGranted: (() -> Unit)? = null
 
     /**
      * Runs a program directly (no su), feeding [stdin] if given. Used for proot and other bundled binaries.
