@@ -11,8 +11,8 @@ android {
         applicationId = "com.lazyexec.droidmcp"
         minSdk = 26
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.14.0"
+        versionCode = 37
+        versionName = "1.0.0"
     }
 
     // proot ships as lib*.so: it must be extracted to nativeLibraryDir, the only place apps may execute files from.
