@@ -396,21 +396,21 @@ private fun SetupCard(ui: UiSnapshot) {
     if (ui.root) return // Root covers everything; the header chip already says so.
     val steps = listOf(
         Step("Screen control", "See the screen, tap, swipe and type", ui.a11y) {
-            it.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            it.startActivitySafely(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         },
         Step("Notifications", "Read your notifications", ui.notif) {
-            it.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            it.startActivitySafely(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         },
         Step("SMS", "Read and send text messages", ui.sms) { c ->
             (c as? android.app.Activity)?.requestPermissions(
                 arrayOf(android.Manifest.permission.READ_SMS, android.Manifest.permission.SEND_SMS), 2)
         },
         Step("Files", "Read and write your storage", ui.files) { c ->
-            if (Build.VERSION.SDK_INT >= 30) c.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            if (Build.VERSION.SDK_INT >= 30) c.startActivitySafely(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                 Uri.parse("package:${c.packageName}")))
         },
         Step("Bubble", "Show what the AI is doing", ui.overlay || ui.a11y) { c ->
-            c.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${c.packageName}")))
+            c.startActivitySafely(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${c.packageName}")))
         },
     )
     val done = steps.count { it.done }

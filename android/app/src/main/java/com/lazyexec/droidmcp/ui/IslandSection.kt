@@ -78,7 +78,7 @@ fun IslandSection(state: AppState) {
                         Text("Needs “Display over other apps”.", style = MaterialTheme.typography.bodySmall,
                             color = StatusColors.warn, modifier = Modifier.weight(1f))
                         TextButton(onClick = {
-                            ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
+                            ctx.startActivitySafely(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
                         }) { Text("Allow") }
                     }
                 }

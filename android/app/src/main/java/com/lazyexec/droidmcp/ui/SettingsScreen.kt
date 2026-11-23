@@ -333,9 +333,9 @@ private fun PermissionsPage(state: AppState) {
         }
     }
     Section(if (ui.root) "Without root" else null) {
-        NavRow("Accessibility", "Screen, taps, typing · ${status(ui.a11y)}") { ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+        NavRow("Accessibility", "Screen, taps, typing · ${status(ui.a11y)}") { ctx.startActivitySafely(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
         HorizontalDivider()
-        NavRow("Notification access", "Read notifications · ${status(ui.notif)}") { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        NavRow("Notification access", "Read notifications · ${status(ui.notif)}") { ctx.startActivitySafely(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
         HorizontalDivider()
         NavRow("SMS", "Read and send texts · ${status(ui.sms)}") {
             (ctx as? android.app.Activity)?.requestPermissions(
@@ -343,12 +343,12 @@ private fun PermissionsPage(state: AppState) {
         }
         HorizontalDivider()
         NavRow("All files access", "Read and write storage · ${status(ui.files)}") {
-            if (Build.VERSION.SDK_INT >= 30) ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+            if (Build.VERSION.SDK_INT >= 30) ctx.startActivitySafely(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
                 Uri.parse("package:${ctx.packageName}")))
         }
         HorizontalDivider()
         NavRow("Display over other apps", "Needed for the bubble · ${status(ui.overlay)}") {
-            ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
+            ctx.startActivitySafely(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")))
         }
     }
     if (!ui.a11y) {
@@ -372,7 +372,7 @@ private fun GeneralPage() {
         SwitchRow("Show notification", "You can also tap Hide on the notification. The server keeps running.", shown, padded = false) { on ->
             shown = on
             if (!com.lazyexec.droidmcp.McpService.setNotificationHidden(ctx, !on)) {
-                ctx.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                ctx.startActivitySafely(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
                     .putExtra(Settings.EXTRA_CHANNEL_ID, com.lazyexec.droidmcp.McpService.CHANNEL))
             }
@@ -424,7 +424,7 @@ private fun LinkRow(title: String, subtitle: String, url: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.small))
-            .clickable { runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } }.padding(vertical = 10.dp),
+            .clickable { ctx.startActivitySafely(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }.padding(vertical = 10.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
