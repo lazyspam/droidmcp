@@ -21,12 +21,22 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
     private val reqSession = ThreadLocal<String?>()
     private val newSession = ThreadLocal<String?>()
 
-    fun handle(method: String, path: String, headers: Map<String, String>, body: String): HttpReply {
-        val h = headers.mapKeys { it.key.lowercase() }
+    /**
+     * The 404/401 reply a request gets before its body matters, or null if it may go on. Lets the local server
+     * turn away requests without a valid token before it reads (and buffers) their body.
+     */
+    fun reject(path: String, headers: Map<String, String>): HttpReply? {
         if (!path.substringBefore('?').trimEnd('/').endsWith("/mcp")) return HttpReply(404, """{"error":"not found, use /mcp"}""")
-        if (Prefs.requireToken(ctx) && !authorized(h["authorization"])) {
+        val auth = headers.entries.firstOrNull { it.key.equals("authorization", ignoreCase = true) }?.value
+        if (Prefs.requireToken(ctx) && !authorized(auth)) {
             return HttpReply(401, """{"error":"unauthorized"}""", mapOf("WWW-Authenticate" to "Bearer"))
         }
+        return null
+    }
+
+    fun handle(method: String, path: String, headers: Map<String, String>, body: String): HttpReply {
+        val h = headers.mapKeys { it.key.lowercase() }
+        reject(path, headers)?.let { return it }
         reqSession.set(h["mcp-session-id"]); newSession.set(null)
         return when (method.uppercase()) {
             "POST" -> post(body).let { r ->
