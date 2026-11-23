@@ -12,8 +12,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.lazyexec.droidmcp.ui.AppState
 import com.lazyexec.droidmcp.ui.DroidApp
 import com.lazyexec.droidmcp.ui.DroidTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var state: AppState
@@ -56,8 +58,11 @@ class MainActivity : ComponentActivity() {
 
     private fun start() {
         McpService.start(this)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
-        // Root check in the background so the status is accurate right away.
-        Thread { if (Shell.rootState == null) Shell.hasRoot(); runOnUiThread { state.refresh() } }.start()
+        // Root check off the main thread so the status is accurate right away; dropped if the screen goes away.
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) { if (Shell.rootState == null) Shell.hasRoot() }
+            state.refresh()
+        }
     }
 
     private fun stop() {

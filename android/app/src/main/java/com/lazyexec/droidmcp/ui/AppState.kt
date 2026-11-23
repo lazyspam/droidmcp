@@ -53,9 +53,21 @@ class AppState(private val ctx: Context) {
 
     private var eventsVersion = -1L
     private var cachedEvents: List<AiEvent> = emptyList()
+    private var crashStamp = -1L
+    private var cachedCrash: String? = null
+
+    /** The last crash report, read again only when the file changes (refresh runs every second on the main thread). */
+    private fun crash(): String? {
+        val f = App.crashFile(ctx)
+        val stamp = if (f.exists()) f.lastModified() else 0L
+        if (stamp != crashStamp) {
+            crashStamp = stamp
+            cachedCrash = if (stamp != 0L) runCatching { f.readText().take(3000) }.getOrNull() else null
+        }
+        return cachedCrash
+    }
 
     fun refresh() {
-        val crashFile = App.crashFile(ctx)
         if (ActivityLog.version != eventsVersion) { eventsVersion = ActivityLog.version; cachedEvents = ActivityLog.events() }
         ui = UiSnapshot(
             running = Status.running,
@@ -74,7 +86,7 @@ class AppState(private val ctx: Context) {
             files = if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
                 else ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED,
             overlay = Settings.canDrawOverlays(ctx),
-            crash = if (crashFile.exists()) runCatching { crashFile.readText().take(3000) }.getOrNull() else null,
+            crash = crash(),
             startedAt = Status.startedAt,
             now = Status.current,
             model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}",
