@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -10,15 +10,15 @@ import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import dev.droidmcp.ActivityLog
-import dev.droidmcp.AiEvent
-import dev.droidmcp.App
-import dev.droidmcp.BuildInfo
-import dev.droidmcp.DroidAccessibility
-import dev.droidmcp.NotifListener
-import dev.droidmcp.Prefs
-import dev.droidmcp.Shell
-import dev.droidmcp.Status
+import com.lazyexec.droidmcp.ActivityLog
+import com.lazyexec.droidmcp.AiEvent
+import com.lazyexec.droidmcp.App
+import com.lazyexec.droidmcp.BuildInfo
+import com.lazyexec.droidmcp.DroidAccessibility
+import com.lazyexec.droidmcp.NotifListener
+import com.lazyexec.droidmcp.Prefs
+import com.lazyexec.droidmcp.Shell
+import com.lazyexec.droidmcp.Status
 
 /** Snapshot of everything the screens show. Refreshed from the service's static state. */
 data class UiSnapshot(

@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Context
 import android.os.Handler
@@ -6,10 +6,10 @@ import android.os.Looper
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import dev.droidmcp.Distro
-import dev.droidmcp.LinuxEnv
-import dev.droidmcp.ShellResult
-import dev.droidmcp.ToolError
+import com.lazyexec.droidmcp.Distro
+import com.lazyexec.droidmcp.LinuxEnv
+import com.lazyexec.droidmcp.ShellResult
+import com.lazyexec.droidmcp.ToolError
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.CountDownLatch

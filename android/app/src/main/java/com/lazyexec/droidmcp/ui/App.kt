@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.view.HapticFeedbackConstants
 import androidx.compose.foundation.layout.Box
@@ -54,7 +54,7 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
     }
 
     // On-phone approval while the app is open (the notification covers the rest of the time).
-    dev.droidmcp.Approvals.pending?.let { p ->
+    com.lazyexec.droidmcp.Approvals.pending?.let { p ->
         val ctx = androidx.compose.ui.platform.LocalContext.current
         androidx.compose.material3.AlertDialog(
             onDismissRequest = {},
@@ -62,11 +62,11 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
             text = { Text("${p.client} wants to control this phone: screen, input, apps and shell. Only allow AI clients you started yourself.") },
             confirmButton = {
                 androidx.compose.foundation.layout.Row {
-                    androidx.compose.material3.TextButton(onClick = { dev.droidmcp.Approvals.decide(ctx, p.key, true, always = true) }) { Text("Always") }
-                    androidx.compose.material3.TextButton(onClick = { dev.droidmcp.Approvals.decide(ctx, p.key, true) }) { Text("Allow") }
+                    androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true, always = true) }) { Text("Always") }
+                    androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true) }) { Text("Allow") }
                 }
             },
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { dev.droidmcp.Approvals.decide(ctx, p.key, false) }) { Text("Deny") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, false) }) { Text("Deny") } },
         )
     }
     Scaffold(

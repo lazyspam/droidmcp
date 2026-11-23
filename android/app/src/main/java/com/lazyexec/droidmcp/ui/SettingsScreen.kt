@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Intent
 import android.net.Uri
@@ -69,9 +69,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.droidmcp.Prefs
-import dev.droidmcp.R
-import dev.droidmcp.Status
+import com.lazyexec.droidmcp.Prefs
+import com.lazyexec.droidmcp.R
+import com.lazyexec.droidmcp.Status
 
 private enum class Page(val title: String) {
     CONNECTION("Connection"), ISLAND("Bubble"), LINUX("Linux"), SECURITY("Security"),
@@ -371,10 +371,10 @@ private fun GeneralPage() {
         HorizontalDivider()
         SwitchRow("Show notification", "You can also tap Hide on the notification. The server keeps running.", shown, padded = false) { on ->
             shown = on
-            if (!dev.droidmcp.McpService.setNotificationHidden(ctx, !on)) {
+            if (!com.lazyexec.droidmcp.McpService.setNotificationHidden(ctx, !on)) {
                 ctx.startActivity(Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
                     .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
-                    .putExtra(Settings.EXTRA_CHANNEL_ID, dev.droidmcp.McpService.CHANNEL))
+                    .putExtra(Settings.EXTRA_CHANNEL_ID, com.lazyexec.droidmcp.McpService.CHANNEL))
             }
         }
     }
@@ -435,9 +435,9 @@ private fun LinkRow(title: String, subtitle: String, url: String) {
 }
 
 private fun linuxSummary(ctx: android.content.Context): String {
-    dev.droidmcp.Distro.entries.forEach { LinuxDownloads.changed[it] }
+    com.lazyexec.droidmcp.Distro.entries.forEach { LinuxDownloads.changed[it] }
     val def = Prefs.defaultDistro(ctx)
-    val installed = dev.droidmcp.Distro.entries.filter { dev.droidmcp.LinuxEnv(ctx, it).installed }
+    val installed = com.lazyexec.droidmcp.Distro.entries.filter { com.lazyexec.droidmcp.LinuxEnv(ctx, it).installed }
     return "Default ${def.label.substringBefore(' ')}" + when (installed.size) {
         0 -> " · nothing downloaded"
         else -> " · ${installed.size} installed"
@@ -449,12 +449,12 @@ private fun linuxSummary(ctx: android.content.Context): String {
 private fun LinuxPage() {
     val ctx = LocalContext.current
     var def by remember { mutableStateOf(Prefs.defaultDistro(ctx)) }
-    var confirm by remember { mutableStateOf<dev.droidmcp.Distro?>(null) }
+    var confirm by remember { mutableStateOf<com.lazyexec.droidmcp.Distro?>(null) }
     Text("Linux runs inside the app with proot: no root or Termux needed. The default is used by new terminals and by the AI.",
         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
-    dev.droidmcp.Distro.entries.forEach { d ->
+    com.lazyexec.droidmcp.Distro.entries.forEach { d ->
         LinuxDownloads.changed[d]
-        val env = remember(LinuxDownloads.changed[d]) { dev.droidmcp.LinuxEnv(ctx, d) }
+        val env = remember(LinuxDownloads.changed[d]) { com.lazyexec.droidmcp.LinuxEnv(ctx, d) }
         val installed = env.installed
         var size by remember(LinuxDownloads.changed[d]) { mutableStateOf<Long?>(null) }
         androidx.compose.runtime.LaunchedEffect(LinuxDownloads.changed[d], installed) {

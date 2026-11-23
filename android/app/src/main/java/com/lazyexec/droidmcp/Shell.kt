@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import java.io.ByteArrayOutputStream
 import java.io.IOException

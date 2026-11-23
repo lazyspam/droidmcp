@@ -1,11 +1,11 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.mutableStateMapOf
-import dev.droidmcp.Distro
-import dev.droidmcp.LinuxEnv
+import com.lazyexec.droidmcp.Distro
+import com.lazyexec.droidmcp.LinuxEnv
 
 /**
  * Distro downloads, owned by the app (not a screen), so they keep going when you switch tabs or rotate,

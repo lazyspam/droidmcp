@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -11,16 +11,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
-import dev.droidmcp.LinuxEnv
-import dev.droidmcp.Mcp
-import dev.droidmcp.Shell
+import com.lazyexec.droidmcp.LinuxEnv
+import com.lazyexec.droidmcp.Mcp
+import com.lazyexec.droidmcp.Shell
 import java.io.File
 
-enum class TermKind(val label: String, val distro: dev.droidmcp.Distro? = null) {
-    ALPINE("Alpine", dev.droidmcp.Distro.ALPINE), UBUNTU("Ubuntu", dev.droidmcp.Distro.UBUNTU),
+enum class TermKind(val label: String, val distro: com.lazyexec.droidmcp.Distro? = null) {
+    ALPINE("Alpine", com.lazyexec.droidmcp.Distro.ALPINE), UBUNTU("Ubuntu", com.lazyexec.droidmcp.Distro.UBUNTU),
     ANDROID("Android"), TERMUX("Termux");
 
-    companion object { fun of(d: dev.droidmcp.Distro) = entries.first { it.distro == d } }
+    companion object { fun of(d: com.lazyexec.droidmcp.Distro) = entries.first { it.distro == d } }
 }
 
 /** One terminal tab. */
@@ -138,13 +138,13 @@ object Terminals {
      */
     private const val CLEAR_FN = "clear() { command clear \"\$@\"; printf '\\033[3J'; }\n"
 
-    private fun welcome(d: dev.droidmcp.Distro): String {
-        val pm = if (d == dev.droidmcp.Distro.UBUNTU) "apt install <package>" else "apk add <package>"
+    private fun welcome(d: com.lazyexec.droidmcp.Distro): String {
+        val pm = if (d == com.lazyexec.droidmcp.Distro.UBUNTU) "apt install <package>" else "apk add <package>"
         return "printf '\\033[32m> Welcome to DroidMCP Terminal\\033[0m\\n" +
             "\\033[90m${d.label} · $pm installs anything · your files are in /sdcard\\033[0m\\n\\n'"
     }
 
-    private fun linuxSession(ctx: Context, distro: dev.droidmcp.Distro): TerminalSession {
+    private fun linuxSession(ctx: Context, distro: com.lazyexec.droidmcp.Distro): TerminalSession {
         val env = LinuxEnv(ctx, distro)
         // Prompt: blue working dir, then $; set after /etc/profile via $ENV (read by interactive ash/bash).
         val rc = File(env.rootfs, "root/.droidmcp_rc")

@@ -43,6 +43,9 @@ The phone connects *out* to the relay, so it works on mobile data and behind any
 ## Quick start
 
 1. **Install** the APK from [Releases](../../releases).
+   From this version the package is `com.lazyexec.droidmcp`, so it installs as a new app next to
+   the old `io.github.iputobject.droidmcp`. Uninstall the old app; settings and pairing must be
+   set up again.
 2. **Open DroidMCP** and tap the power button. It connects to the free public relay at
    `droid.lazyexec.dev` with a random device ID, so no account or server is needed.
    - With root, everything works right away.

@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.app.Activity
 import android.app.PendingIntent
@@ -181,7 +181,7 @@ class Tools(private val ctx: Context) {
             var note = ""
             val r = if (shared) {
                 try {
-                    dev.droidmcp.ui.AiTerminal.run(ctx, env.distro, cmd, timeout.toLong())
+                    com.lazyexec.droidmcp.ui.AiTerminal.run(ctx, env.distro, cmd, timeout.toLong())
                 } catch (e: ToolError) {
                     if (e.message?.contains("busy") == true) throw e
                     shared = false
@@ -212,7 +212,7 @@ class Tools(private val ctx: Context) {
                 "which" to prop("string", "ai (default) or current"),
                 "lines" to prop("integer", "How many last lines (default 60, max 500)"),
             )) { a ->
-            text(dev.droidmcp.ui.AiTerminal.read(a.str("which", "ai"), a.int("lines", 60, 1..500)))
+            text(com.lazyexec.droidmcp.ui.AiTerminal.read(a.str("which", "ai"), a.int("lines", 60, 1..500)))
         },
         Tool("terminal_input",
             "Type into the shared AI terminal, e.g. answer a prompt (\"y\\n\"), or send ctrl_c. Use after terminal_read shows a waiting prompt.",
@@ -220,7 +220,7 @@ class Tools(private val ctx: Context) {
                 "text" to prop("string", "Text to type; \\n presses Enter"),
                 "ctrl_c" to prop("boolean", "Send Ctrl+C instead"),
             )) { a ->
-            dev.droidmcp.ui.AiTerminal.type(if (a.bool("ctrl_c", false)) "\u0003" else a.str("text").replace("\n", "\r"))
+            com.lazyexec.droidmcp.ui.AiTerminal.type(if (a.bool("ctrl_c", false)) "\u0003" else a.str("text").replace("\n", "\r"))
             text("Sent.")
         },
         Tool("linux_setup", "Install, reinstall or list the Linux distros used by linux_exec (alpine, ubuntu).",
@@ -659,7 +659,7 @@ class Tools(private val ctx: Context) {
         }
         val sms = if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(SmsManager::class.java) else SmsManager.getDefault()
         val parts = sms.divideMessage(message)
-        val action = "dev.droidmcp.SMS_SENT.${System.nanoTime()}"
+        val action = "com.lazyexec.droidmcp.SMS_SENT.${System.nanoTime()}"
         val latch = CountDownLatch(parts.size)
         val firstError = AtomicInteger(Activity.RESULT_OK)
         val receiver = object : BroadcastReceiver() {

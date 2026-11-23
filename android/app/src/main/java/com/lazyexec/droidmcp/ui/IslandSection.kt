@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Intent
 import android.net.Uri
@@ -43,8 +43,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.droidmcp.Island
-import dev.droidmcp.Prefs
+import com.lazyexec.droidmcp.Island
+import com.lazyexec.droidmcp.Prefs
 
 @Composable
 fun IslandSection(state: AppState) {
@@ -56,7 +56,7 @@ fun IslandSection(state: AppState) {
     fun update(s: Prefs.IslandStyle) {
         style = s
         Prefs.setIslandStyle(ctx, s)
-        if (enabled && dev.droidmcp.Status.running) Island.reattach(ctx)
+        if (enabled && com.lazyexec.droidmcp.Status.running) Island.reattach(ctx)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -71,7 +71,7 @@ fun IslandSection(state: AppState) {
                 SwitchRow("Show bubble", "Visible while the server runs", enabled) {
                     enabled = it
                     Prefs.setIsland(ctx, it)
-                    if (it && dev.droidmcp.Status.running) Island.attach(ctx) else Island.detach()
+                    if (it && com.lazyexec.droidmcp.Status.running) Island.attach(ctx) else Island.detach()
                 }
                 if (!state.ui.overlay && !state.ui.a11y && !state.ui.root) {
                     Row(Modifier.padding(horizontal = 20.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -151,7 +151,7 @@ private fun PhonePreview(style: Prefs.IslandStyle, enabled: Boolean) {
                     Box(Modifier.size(bubble.dp).clip(CircleShape).background(Color(0xFF1C1C1E)), contentAlignment = Alignment.Center) {
                         Box(Modifier.size(bubble.dp).clip(CircleShape).background(Color.Transparent)
                             .border(2.5.dp, StatusColors.busy, CircleShape))
-                        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(dev.droidmcp.R.drawable.ic_logo_mark),
+                        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.lazyexec.droidmcp.R.drawable.ic_logo_mark),
                             null, Modifier.size((bubble * 0.92).dp))
                     }
                 }

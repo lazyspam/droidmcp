@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.app.Notification
 import android.app.NotificationChannel

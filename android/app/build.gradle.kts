@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "dev.droidmcp"
+    namespace = "com.lazyexec.droidmcp"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "io.github.iputobject.droidmcp"
+        applicationId = "com.lazyexec.droidmcp"
         minSdk = 26
         targetSdk = 36
         versionCode = 36

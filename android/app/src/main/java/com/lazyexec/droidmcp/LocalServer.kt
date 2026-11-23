@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.util.Log
 import fi.iki.elonen.NanoHTTPD

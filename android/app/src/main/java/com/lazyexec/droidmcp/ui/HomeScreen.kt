@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Context
 import android.content.Intent
@@ -78,7 +78,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.droidmcp.AiEvent
+import com.lazyexec.droidmcp.AiEvent
 import kotlinx.coroutines.launch
 
 private enum class Power { OFF, CONNECTING, LIVE, LOCAL, ERROR }
@@ -159,7 +159,7 @@ private fun steadyNow(raw: String?): String? {
 private fun Header(ui: UiSnapshot) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp)) {
         Box(Modifier.size(42.dp).clip(RoundedCornerShape(13.dp)).background(Color(0xFF14161C)), contentAlignment = Alignment.Center) {
-            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(dev.droidmcp.R.drawable.ic_logo_mark), "DroidMCP",
+            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(com.lazyexec.droidmcp.R.drawable.ic_logo_mark), "DroidMCP",
                 Modifier.size(42.dp))
         }
         Spacer(Modifier.width(12.dp))
@@ -336,7 +336,7 @@ private fun ConnectCard(state: AppState) {
     Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp)) {
             Text("Connect your AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            if (!dev.droidmcp.Prefs.requireToken(LocalContext.current)) {
+            if (!com.lazyexec.droidmcp.Prefs.requireToken(LocalContext.current)) {
                 Text("Token is off: anyone with this URL can control your phone.", style = MaterialTheme.typography.bodySmall,
                     color = StatusColors.warn, modifier = Modifier.padding(vertical = 4.dp))
             }
@@ -499,7 +499,7 @@ private fun CrashCard(text: String) {
                 Text("The app crashed last time", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(text.lines().getOrNull(1)?.take(90) ?: "", style = MaterialTheme.typography.bodySmall, maxLines = 2, fontSize = 11.sp)
             }
-            TextButton(onClick = { dev.droidmcp.App.crashFile(ctx).delete() }) { Text("Dismiss") }
+            TextButton(onClick = { com.lazyexec.droidmcp.App.crashFile(ctx).delete() }) { Text("Dismiss") }
         }
     }
 }

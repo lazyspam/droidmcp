@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.os.Build
 import android.os.Bundle
@@ -9,9 +9,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import dev.droidmcp.ui.AppState
-import dev.droidmcp.ui.DroidApp
-import dev.droidmcp.ui.DroidTheme
+import com.lazyexec.droidmcp.ui.AppState
+import com.lazyexec.droidmcp.ui.DroidApp
+import com.lazyexec.droidmcp.ui.DroidTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

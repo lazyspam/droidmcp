@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import android.content.Context
 import android.graphics.Typeface
@@ -64,8 +64,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.termux.terminal.TerminalSession
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
-import dev.droidmcp.LinuxEnv
-import dev.droidmcp.Shell
+import com.lazyexec.droidmcp.LinuxEnv
+import com.lazyexec.droidmcp.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -84,9 +84,9 @@ private object Mods {
 @Composable
 fun TerminalScreen() {
     val ctx = LocalContext.current
-    val default = remember { dev.droidmcp.Prefs.defaultDistro(ctx) }
+    val default = remember { com.lazyexec.droidmcp.Prefs.defaultDistro(ctx) }
     // A distro the user asked for that still needs downloading (shown over the terminal until done or cancelled).
-    var setupFor by remember { mutableStateOf<dev.droidmcp.Distro?>(null) }
+    var setupFor by remember { mutableStateOf<com.lazyexec.droidmcp.Distro?>(null) }
 
     // First visit: open the default distro if it's ready, otherwise offer to download it.
     LaunchedEffect(Unit) {
@@ -181,7 +181,7 @@ private fun TopBar(onNew: (TermKind) -> Unit) {
             RoundIcon(onClick = { newOpen = true }) { Icon(Icons.Filled.Add, "New session", tint = PillText, modifier = Modifier.size(20.dp)) }
             AppMenu(expanded = newOpen, onDismiss = { newOpen = false }) {
                 // Every distro is listed; ones not downloaded yet say so (recognition over recall).
-                dev.droidmcp.Distro.entries.forEach { d ->
+                com.lazyexec.droidmcp.Distro.entries.forEach { d ->
                     LinuxDownloads.changed[d] // re-read installed state after a download
                     val ready = LinuxEnv(ctx, d).installed
                     AppMenuItem(
@@ -280,10 +280,10 @@ private fun RenameDialog(tab: TermTab, onDone: () -> Unit) {
 @Composable
 fun SessionIcon(kind: TermKind, dimmed: Boolean = false, size: Int = 24) {
     val res = when (kind) {
-        TermKind.ALPINE -> dev.droidmcp.R.drawable.ic_session_alpine
-        TermKind.UBUNTU -> dev.droidmcp.R.drawable.ic_session_ubuntu
-        TermKind.ANDROID -> dev.droidmcp.R.drawable.ic_session_android
-        TermKind.TERMUX -> dev.droidmcp.R.drawable.ic_session_termux
+        TermKind.ALPINE -> com.lazyexec.droidmcp.R.drawable.ic_session_alpine
+        TermKind.UBUNTU -> com.lazyexec.droidmcp.R.drawable.ic_session_ubuntu
+        TermKind.ANDROID -> com.lazyexec.droidmcp.R.drawable.ic_session_android
+        TermKind.TERMUX -> com.lazyexec.droidmcp.R.drawable.ic_session_termux
     }
     androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(res), kind.label,
         Modifier.size(size.dp).then(if (dimmed) Modifier.alpha(0.4f) else Modifier))
@@ -410,7 +410,7 @@ private fun Key(label: String, active: Boolean = false, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SetupLinux(distro: dev.droidmcp.Distro, canCancel: Boolean, onCancel: () -> Unit, onDone: () -> Unit) {
+private fun SetupLinux(distro: com.lazyexec.droidmcp.Distro, canCancel: Boolean, onCancel: () -> Unit, onDone: () -> Unit) {
     val ctx = LocalContext.current
     val progress = LinuxDownloads.progress[distro]
     val error = LinuxDownloads.errors[distro]
@@ -424,8 +424,8 @@ private fun SetupLinux(distro: dev.droidmcp.Distro, canCancel: Boolean, onCancel
         Spacer(Modifier.height(8.dp))
         Text(
             when (distro) {
-                dev.droidmcp.Distro.ALPINE -> "A tiny, fast Linux with apk: git, python, node and thousands more packages."
-                dev.droidmcp.Distro.UBUNTU -> "Full Ubuntu with apt. Runs prebuilt Linux software that Alpine can't (official Node, Bun, Python wheels, VS Code server)."
+                com.lazyexec.droidmcp.Distro.ALPINE -> "A tiny, fast Linux with apk: git, python, node and thousands more packages."
+                com.lazyexec.droidmcp.Distro.UBUNTU -> "Full Ubuntu with apt. Runs prebuilt Linux software that Alpine can't (official Node, Bun, Python wheels, VS Code server)."
             } + " No root or Termux needed.",
             color = Color(0xFFAEAEB2), style = MaterialTheme.typography.bodyMedium,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,

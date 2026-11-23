@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -163,8 +163,8 @@ class McpService : Service() {
     companion object {
         const val CHANNEL = "server"
 
-        const val ACTION_STOP = "dev.droidmcp.STOP"
-        const val ACTION_HIDE = "dev.droidmcp.HIDE"
+        const val ACTION_STOP = "com.lazyexec.droidmcp.STOP"
+        const val ACTION_HIDE = "com.lazyexec.droidmcp.HIDE"
         private val main = android.os.Handler(android.os.Looper.getMainLooper())
 
         /**

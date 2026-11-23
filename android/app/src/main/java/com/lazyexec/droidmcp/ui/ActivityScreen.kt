@@ -1,4 +1,4 @@
-package dev.droidmcp.ui
+package com.lazyexec.droidmcp.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,8 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.droidmcp.ActivityLog
-import dev.droidmcp.AiEvent
+import com.lazyexec.droidmcp.ActivityLog
+import com.lazyexec.droidmcp.AiEvent
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date

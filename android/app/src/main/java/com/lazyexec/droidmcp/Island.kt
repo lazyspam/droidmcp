@@ -1,4 +1,4 @@
-package dev.droidmcp
+package com.lazyexec.droidmcp
 
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
