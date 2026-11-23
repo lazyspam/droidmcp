@@ -151,7 +151,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         Island.finish(name, ok)
                         Status.current = null
                         ActivityLog.event(AiEvent(started, name, Island.describe(name, args), ok,
-                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, Status.client))
+                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, client))
                     }
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))
