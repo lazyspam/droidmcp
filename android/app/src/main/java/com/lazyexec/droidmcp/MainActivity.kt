@@ -43,6 +43,7 @@ class MainActivity : ComponentActivity() {
     // onStart/onStop (not resume/pause) so split-screen and picture-in-picture keep updating.
     override fun onStart() {
         super.onStart()
+        visible = true
         ActivityLog.listener = { runOnUiThread { if (!isDestroyed) state.refresh() } }
         state.refresh()
         // One GitHub request per app open (skipped within 5 minutes of the last one); no timers.
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        visible = false
         ActivityLog.listener = null
         super.onStop()
     }
@@ -71,6 +73,12 @@ class MainActivity : ComponentActivity() {
     private fun stop() {
         McpService.stop(this)
         state.refresh()
+    }
+
+    companion object {
+        /** The app's screen is on show (between onStart and onStop). */
+        @Volatile var visible = false
+            private set
     }
 
     private fun restart() {

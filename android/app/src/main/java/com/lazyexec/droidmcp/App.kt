@@ -9,6 +9,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         ActivityLog.init(this)
+        Updater.reportPending(this)
         // With root, grant ourselves what the setup steps would ask the user for.
         Shell.onRootGranted = { RootGrants.apply(this) }
         val previous = Thread.getDefaultUncaughtExceptionHandler()

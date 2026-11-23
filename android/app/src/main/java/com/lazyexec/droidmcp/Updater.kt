@@ -123,11 +123,15 @@ object Updater {
                 val apk = withContext(Dispatchers.IO) { download(app, url, r) { d, t -> scope.launch { if (phase is Phase.Downloading) phase = Phase.Downloading(d, t) } } }
                 phase = Phase.Installing
                 val root = withContext(Dispatchers.IO) { Shell.rootState ?: Shell.hasRoot() }
+                prefs(app).edit().putString("pending", r.version).putBoolean("pending_root", root).apply()
                 if (root) {
-                    // On success the app is replaced and restarts; we only get here on failure.
-                    val err = withContext(Dispatchers.IO) { rootInstall(apk) }
+                    // On success pm kills this process and the detached script starts us again; we only get here on failure.
+                    val err = withContext(Dispatchers.IO) { rootInstall(app, apk) }
+                    prefs(app).edit().remove("pending").apply()
+                    ActivityLog.add("✗ update to ${r.version}: $err")
                     phase = Phase.Failed(err)
                 } else {
+                    // The installer kills us too; UpdateReceiver restarts the server (Prefs.serverWasOn).
                     systemInstall(app, apk)
                     phase = Phase.Handed
                 }
@@ -213,28 +217,83 @@ object Updater {
 
     // ---- install ----
 
-    /** Returns an error message (pm install only returns when it failed or the app wasn't killed). */
-    private fun rootInstall(apk: File): String {
+    private const val TMP_APK = "/data/local/tmp/droidmcp-update.apk"
+    private const val LOG = "/data/local/tmp/droidmcp-update.log"
+    private const val INSTALL_TIMEOUT_MS = 180_000L
+
+    /**
+     * Installs with `pm install -r` from a detached root script: pm kills this process (and the MCP server with it)
+     * when it replaces the app, so the script outlives us and then starts the server again if it was running, and the
+     * app screen if it was open. pm's output goes to [LOG]; we poll it, and only return (with an error message) when
+     * the install failed or didn't finish. On success we are killed first and [reportPending] notes it on next start.
+     */
+    private suspend fun rootInstall(c: Context, apk: File): String {
+        val pkg = c.packageName
+        val q = Shell::q
+        val restart = buildString {
+            if (Status.running) append("am start-foreground-service -n ${q("$pkg/${McpService::class.java.name}")} >/dev/null 2>&1; ")
+            if (MainActivity.visible) append("am start -n ${q("$pkg/${MainActivity::class.java.name}")} >/dev/null 2>&1; ")
+        }
         // Copy to /data/local/tmp so pm (system_server/shell) can read it regardless of our app's data permissions.
-        val tmp = "/data/local/tmp/droidmcp-update.apk"
-        val script = """
-            cp '${apk.absolutePath}' $tmp && chmod 644 $tmp || { echo 'copy failed'; exit 1; }
-            out=${'$'}(pm install -r $tmp 2>&1); code=${'$'}?
-            rm -f $tmp
-            echo "${'$'}out"; exit ${'$'}code
-        """.trimIndent()
-        val r = try { Shell.run(script, root = true, timeoutSec = 180) } catch (e: Exception) {
+        val job = "pm install -r ${q(TMP_APK)} > ${q(LOG)} 2>&1; code=\$?; echo \"exit=\$code\" >> ${q(LOG)}; " +
+            "rm -f ${q(TMP_APK)}; [ \$code -eq 0 ] && { $restart:; }; true"
+        val script = "rm -f ${q(LOG)}; cp ${q(apk.absolutePath)} ${q(TMP_APK)} && chmod 644 ${q(TMP_APK)} || { echo 'copy failed'; exit 1; }\n" +
+            "setsid nohup sh -c ${q(job)} </dev/null >/dev/null 2>&1 &"
+        val r = try { Shell.run(script, root = true, timeoutSec = 60) } catch (e: Exception) {
             return "Root install failed: ${e.message}"
         }
-        val out = (r.out + "\n" + r.stderr).trim()
+        if (r.exitCode != 0) return "Root install failed: " + (r.out + "\n" + r.stderr).trim().ifBlank { "exit ${r.exitCode}" }
+        apk.delete()
+        val deadline = System.currentTimeMillis() + INSTALL_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            kotlinx.coroutines.delay(1500)
+            val log = readLog() ?: continue
+            if (log.lineSequence().any { it.startsWith("exit=") }) return describeFailure(log)
+        }
+        return "Install timed out"
+    }
+
+    private fun readLog(): String? = runCatching { Shell.run("cat ${Shell.q(LOG)} 2>/dev/null", root = true, timeoutSec = 10).out }.getOrNull()
+
+    private fun describeFailure(log: String): String {
+        val out = log.lineSequence().filterNot { it.startsWith("exit=") }.joinToString("\n").trim()
         return when {
-            r.exitCode == 0 && out.contains("Success") -> "Installed. Restart DroidMCP to use the new version."
+            out.contains("Success") -> "Installed. Restart DroidMCP to use the new version."
             out.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE") ->
                 "Install failed: the new APK is signed with a different key than this build (for example a debug build). Uninstall this one first, or install the APK by hand."
             out.contains("INSTALL_FAILED_VERSION_DOWNGRADE") -> "Install failed: the downloaded version is older than the installed one."
-            r.timedOut -> "Install timed out"
-            else -> "Install failed: " + out.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty().ifBlank { "exit ${r.exitCode}" }
+            else -> "Install failed: " + out.lineSequence().lastOrNull { it.isNotBlank() }.orEmpty()
+                .ifBlank { log.lineSequence().firstOrNull { it.startsWith("exit=") }.orEmpty() }
         }
+    }
+
+    /**
+     * Called at app start: if an in-app update was under way when the old process died, log how it ended
+     * ("Updated to X", or pm's error from the root install log).
+     */
+    fun reportPending(c: Context) {
+        val p = prefs(c)
+        val target = p.getString("pending", null) ?: return
+        val root = p.getBoolean("pending_root", false)
+        p.edit().remove("pending").remove("pending_root").apply()
+        reported = true
+        File(c.cacheDir, "update").deleteRecursively()
+        if (compare(BuildInfo.VERSION, target) >= 0) {
+            ActivityLog.add("updated to ${BuildInfo.VERSION}")
+            if (root) Thread { runCatching { Shell.run("rm -f ${Shell.q(LOG)}", root = true, timeoutSec = 10) } }.start()
+            return
+        }
+        Thread {
+            val log = if (root) readLog() else null
+            ActivityLog.add("✗ update to $target: " + if (log.isNullOrBlank()) "did not finish" else describeFailure(log))
+        }.start()
+    }
+
+    @Volatile private var reported = false
+
+    /** From [UpdateReceiver]: the app was replaced. Logs a manual install that [reportPending] didn't already cover. */
+    fun onReplaced(c: Context) {
+        if (!reported) ActivityLog.add("app replaced, now ${BuildInfo.VERSION}")
     }
 
     private fun systemInstall(c: Context, apk: File) {

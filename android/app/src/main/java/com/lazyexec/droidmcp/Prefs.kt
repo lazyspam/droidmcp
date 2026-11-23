@@ -66,6 +66,15 @@ object Prefs {
     fun allowShell(c: Context) = p(c).getBoolean("allow_shell", true)
     fun autostart(c: Context) = p(c).getBoolean("autostart", false)
 
+    /**
+     * The server was running in this boot when the app last saw it. Cleared when the service stops normally, but not
+     * when the process is killed (pm replacing the app does that), so [UpdateReceiver] can bring the server back.
+     */
+    fun serverWasOn(c: Context) = p(c).getInt("server_on_boot", -1).let { it != -1 && it == bootCount(c) }
+    fun setServerOn(c: Context, on: Boolean) = p(c).edit().putInt("server_on_boot", if (on) bootCount(c) else -1).apply()
+    private fun bootCount(c: Context) =
+        android.provider.Settings.Global.getInt(c.contentResolver, android.provider.Settings.Global.BOOT_COUNT, 0)
+
     /** Clients must send the bearer token. On by default; turning it off is the owner's choice and risk. */
     fun requireToken(c: Context) = p(c).getBoolean("require_token", true)
     fun setRequireToken(c: Context, on: Boolean) = p(c).edit().putBoolean("require_token", on).apply()

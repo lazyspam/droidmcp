@@ -112,6 +112,7 @@ class McpService : Service() {
             Status.relay = "not configured"
         }
         ActivityLog.add("service started")
+        Prefs.setServerOn(this, true)
         // Re-apply "hidden" after restarts and updates (snoozes don't survive the notification being re-posted).
         if (Prefs.notifHidden(this)) main.postDelayed({ setNotificationHidden(this, true) }, 1500)
         Island.attach(this)
@@ -125,6 +126,7 @@ class McpService : Service() {
         wake?.takeIf { it.isHeld }?.release()
         wifi?.takeIf { it.isHeld }?.release()
         Island.detach()
+        Prefs.setServerOn(this, false)
         Status.running = false
         Status.relay = "off"
         Status.local = "off"
@@ -210,6 +212,21 @@ class BootReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED && Prefs.autostart(context)) {
             McpService.start(context)?.let { ActivityLog.add("✗ autostart: $it") }
+        }
+    }
+}
+
+/**
+ * The app was replaced (in-app update through the system installer, a root install, or a manual install).
+ * Android kills the old process and starts nothing again, so restart the server if it was running before.
+ * Independent of autostart (that is only about boot); McpService ignores a start while it already runs.
+ */
+class UpdateReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        Updater.onReplaced(context)
+        if (Prefs.serverWasOn(context) && !Status.running) {
+            McpService.start(context)?.let { ActivityLog.add("✗ restart after update: $it") }
         }
     }
 }
