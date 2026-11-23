@@ -39,9 +39,14 @@ object RootGrants {
         val pkg = c.packageName
         val steps = linkedMapOf<String, String>() // name -> command
 
-        val a11y = ComponentName(c, DroidAccessibility::class.java).flattenToString()
+        val me = ComponentName(c, DroidAccessibility::class.java)
+        val a11y = me.flattenToString()
+        // Decided from the two settings alone, never from whether the service is running (right after a start it
+        // may not have connected yet). The log line says which one was missing when it does grant.
+        val listed = a11yListed(c, me)
         val a11yOn = Settings.Secure.getInt(c.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 0) == 1
-        if (!DroidAccessibility.enabled(c) || !a11yOn) {
+        if (!listed || !a11yOn) {
+            Log.i(Mcp.TAG, "root grants: accessibility missing (in enabled list: $listed, accessibility_enabled: $a11yOn)")
             steps["accessibility"] = "cur=\$(settings get secure enabled_accessibility_services); " +
                 "case \":\$cur:\" in *${Shell.q(":$a11y:")}*) ;; " +
                 "*) if [ -z \"\$cur\" ] || [ \"\$cur\" = null ]; then new=${Shell.q(a11y)}; else new=\"\$cur:\"${Shell.q(a11y)}; fi; " +
@@ -76,6 +81,16 @@ object RootGrants {
         Log.i(Mcp.TAG, "root grants: ok=$ok failed=$failed")
         if (ok.isNotEmpty()) ActivityLog.add("root: granted ${ok.joinToString(", ")}")
         if (failed.isNotEmpty()) ActivityLog.add("✗ root could not grant ${failed.joinToString(", ")}; use the setup steps")
+    }
+
+    /**
+     * Whether Settings.Secure ENABLED_ACCESSIBILITY_SERVICES lists [me]. The value is a colon-separated list of
+     * flattened component names, long or short form ("pkg/.Cls"), so entries are compared as ComponentNames.
+     */
+    private fun a11yListed(c: Context, me: ComponentName): Boolean {
+        val list = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+            ?: return false
+        return list.split(':').any { e -> e.isNotBlank() && ComponentName.unflattenFromString(e.trim()) == me }
     }
 
     /** Dangerous (runtime) permissions the manifest asks for that aren't granted yet. */
