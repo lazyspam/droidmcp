@@ -59,6 +59,10 @@ object Island {
     private val calls = ArrayList<Call>()
     private var style = Prefs.IslandStyle()
     private var screenW = 0
+    private var bubbleSize = 0
+    private var edgePx = 0
+    /** Re-places the island when the screen rotates (its windows use absolute screen pixels). */
+    private var rotation: Pair<Context, android.content.ComponentCallbacks>? = null
     private var gapPx = 0
     private var appCtx: Context? = null
     private var overlayType = 0
@@ -90,6 +94,8 @@ object Island {
     fun detach() = main.post { detachNow() }
 
     private fun detachNow() {
+        rotation?.let { (c, cb) -> try { c.unregisterComponentCallbacks(cb) } catch (_: Exception) {} }
+        rotation = null
         for (v in listOf<View?>(balloon, bubble)) try { if (v != null) wm?.removeView(v) } catch (_: Exception) {}
         pulse?.cancel()
         // [calls] stays: a rebuild (accessibility service (re)connecting, a style change) doesn't end the running calls.
@@ -199,12 +205,12 @@ object Island {
 
     private fun build(ctx: Context, type: Int) {
         val dm = ctx.resources.displayMetrics
-        screenW = dm.widthPixels
+        screenW = screenSize(w0(ctx)).x
         gapPx = dp(ctx, 8f)
         val size = dp(ctx, when (style.size) { 0 -> 42f; 2 -> 60f; else -> 50f })
         val alpha = 255 // whole-window opacity is applied via LayoutParams.alpha (see applyOpacity)
         overlayType = type
-        val w = ctx.getSystemService(WindowManager::class.java)
+        val w = w0(ctx)
 
         // Balloon: its own window that never takes touches.
         val b = TextView(ctx).apply {
@@ -212,7 +218,7 @@ object Island {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, when (style.size) { 0 -> 12f; 2 -> 15f; else -> 13.5f })
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             maxLines = 2; ellipsize = TextUtils.TruncateAt.END
-            maxWidth = (dm.widthPixels * 0.62).toInt()
+            maxWidth = (screenW * 0.62).toInt()
             setPadding(dp(ctx, 14f), dp(ctx, 9f), dp(ctx, 14f), dp(ctx, 9f))
             background = GradientDrawable().apply { setColor(Color.argb(alpha, 44, 44, 46)) }
             visibility = View.GONE
@@ -244,17 +250,49 @@ object Island {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = if (onLeft) edge else screenW - size - edge
-            y = if (style.y >= 0) style.y else (dm.heightPixels * 0.22).toInt()
+            y = (if (style.y >= 0) style.y else (dm.heightPixels * 0.22).toInt())
+                .coerceIn(0, (screenSize(w).y - size).coerceAtLeast(0))
             title = "DroidMCP island"
         }
 
         w.addView(b, bLp)
         w.addView(bub, uLp)
         wm = w; bubble = bub; ring = r; logo = face; clientView = clientImg; balloon = b; bubbleLp = uLp; balloonLp = bLp
+        bubbleSize = size; edgePx = edge
+        val cb = object : android.content.ComponentCallbacks {
+            override fun onConfigurationChanged(newConfig: android.content.res.Configuration) { main.post { onScreenResized() } }
+            @Deprecated("Deprecated in Java") override fun onLowMemory() {}
+        }
+        ctx.registerComponentCallbacks(cb)
+        rotation = ctx to cb
         applyOpacityNow()
         enableDrag(bub, uLp, w, ctx, size, edge)
         // Rebuilt while calls run (e.g. the accessibility service connected mid-call): keep showing them.
         if (calls.isNotEmpty()) showNewest() else setState(State.IDLE, "")
+    }
+
+    private fun w0(ctx: Context) = ctx.getSystemService(WindowManager::class.java)
+
+    /** The screen's current size in pixels (follows rotation, unlike a size read once). */
+    private fun screenSize(w: WindowManager): android.graphics.Point =
+        if (android.os.Build.VERSION.SDK_INT >= 30) w.currentWindowMetrics.bounds.let { android.graphics.Point(it.width(), it.height()) }
+        else android.graphics.Point().also { @Suppress("DEPRECATION") w.defaultDisplay.getRealSize(it) }
+
+    /**
+     * After a rotation the windows kept their old pixel position, which could be off the new screen
+     * (right edge of landscape = beyond the width of portrait). Snap the bubble back to its edge, keep it
+     * on screen vertically and put the balloon beside it again.
+     */
+    private fun onScreenResized() {
+        val w = wm ?: return; val ul = bubbleLp ?: return; val v = bubble ?: return
+        val size = screenSize(w)
+        if (size.x == screenW && ul.y + bubbleSize <= size.y) return
+        screenW = size.x
+        ul.x = if (onLeft) edgePx else screenW - bubbleSize - edgePx
+        ul.y = ul.y.coerceIn(0, (size.y - bubbleSize).coerceAtLeast(0))
+        try { w.updateViewLayout(v, ul) } catch (_: Exception) {}
+        balloon?.maxWidth = (screenW * 0.62).toInt()
+        placeBalloon()
     }
 
     /** Keeps the balloon beside the bubble, opening towards the middle of the screen. */
