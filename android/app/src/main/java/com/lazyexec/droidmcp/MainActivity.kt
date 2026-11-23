@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             DroidTheme {
                 DroidApp(state, onStart = ::start, onStop = ::stop, onRestart = ::restart)
+                com.lazyexec.droidmcp.ui.UpdateSheetHost()
             }
         }
         if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         ActivityLog.listener = { runOnUiThread { if (!isDestroyed) state.refresh() } }
         state.refresh()
+        // One GitHub request per app open (skipped within 5 minutes of the last one); no timers.
+        Updater.autoCheck(this)
     }
 
     override fun onStop() {

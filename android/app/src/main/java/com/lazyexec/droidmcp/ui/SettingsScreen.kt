@@ -457,6 +457,7 @@ private fun AboutPage(state: AppState) {
         Text("DroidMCP", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Text("Version ${state.version}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    Section(null) { UpdateCheckRow() }
     Section(null) {
         Text("Lets AI agents use this phone over MCP: screen, input, apps, messages, files, a root shell and a full Alpine Linux.",
             style = MaterialTheme.typography.bodyMedium)
