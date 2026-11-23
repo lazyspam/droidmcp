@@ -16,8 +16,11 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
 
     private val supportedVersions = listOf("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 
-    /** Session id -> client name ("claude-code"), issued on initialize. */
-    private val sessions = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /**
+     * Session id -> the client that opened it (its initialize clientInfo). Saved (see [Prefs.saveSession]), because
+     * clients keep their session id when the service restarts or the app updates and don't initialize again.
+     */
+    private val sessions = java.util.concurrent.ConcurrentHashMap<String, McpClient>(Prefs.sessions(ctx))
     private val reqSession = ThreadLocal<String?>()
     private val newSession = ThreadLocal<String?>()
 
@@ -42,7 +45,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             "POST" -> post(body).let { r ->
                 newSession.get()?.let { sid -> HttpReply(r.status, r.body, r.headers + ("Mcp-Session-Id" to sid)) } ?: r
             }
-            "DELETE" -> { h["mcp-session-id"]?.let { sessions.remove(it) }; HttpReply(200, "{}") }
+            "DELETE" -> { h["mcp-session-id"]?.let { sessions.remove(it); Prefs.removeSession(ctx, it) }; HttpReply(200, "{}") }
             // No server-initiated stream; spec allows 405 for GET.
             else -> HttpReply(405, """{"error":"method not allowed"}""", mapOf("Allow" to "POST, DELETE"))
         }
@@ -98,11 +101,12 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             when (method) {
                 "initialize" -> {
                     val asked = params.optString("protocolVersion")
-                    params.optJSONObject("clientInfo")?.let { ci ->
-                        Status.client = listOf(ci.optString("name"), ci.optString("version")).filter { it.isNotBlank() }.joinToString(" ")
-                    }
+                    val ci = params.optJSONObject("clientInfo")
+                    val client = McpClient(ci?.optString("name")?.trim().orEmpty(), ci?.optString("version")?.trim().orEmpty())
+                    if (client.name.isNotEmpty()) Prefs.setLastClient(ctx, client)
                     val sid = java.util.UUID.randomUUID().toString()
-                    sessions[sid] = params.optJSONObject("clientInfo")?.optString("name")?.ifBlank { null } ?: "An AI client"
+                    sessions[sid] = client
+                    Prefs.saveSession(ctx, sid, client)
                     newSession.set(sid)
                     result(id, JSONObject()
                         .put("protocolVersion", if (asked in supportedVersions) asked else supportedVersions.first())
@@ -116,10 +120,13 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     val name = params.opt("name") as? String
                         ?: return error(id, -32602, "Invalid params: tools/call needs a string 'name'.")
                     // On-phone approval (if enabled): per session, or per client name for clients without sessions.
+                    // This request's own client: with several connected, each action is credited to the one that sent it.
+                    // No (or an unknown) session id: the client that connected last.
                     val sid = reqSession.get()
-                    val client = sid?.let { sessions[it] } ?: Status.client.substringBefore(' ').ifBlank { "An AI client" }
+                    val who = sid?.let { sessions[it] } ?: Prefs.lastClient(ctx)
+                    val client = who.name.ifBlank { "An AI client" }
                     Approvals.check(ctx, sid ?: "client:$client", client)?.let { reason ->
-                        ActivityLog.event(AiEvent(System.currentTimeMillis(), name, "Blocked: not approved", false, "", reason, 0, client))
+                        ActivityLog.event(AiEvent(System.currentTimeMillis(), name, "Blocked: not approved", false, "", reason, 0, who.label))
                         return result(id, JSONObject().put("isError", true)
                             .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", reason))))
                     }
@@ -151,7 +158,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                         Island.finish(name, ok)
                         Status.current = null
                         ActivityLog.event(AiEvent(started, name, Island.describe(name, args), ok,
-                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, client))
+                            args.toString(2).take(4000), summary.take(8000), System.currentTimeMillis() - started, who.label))
                     }
                 }
                 "resources/list" -> result(id, JSONObject().put("resources", JSONArray()))

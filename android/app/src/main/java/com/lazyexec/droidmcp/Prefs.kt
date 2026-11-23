@@ -125,6 +125,33 @@ object Prefs {
         .putBoolean("allow_shell", allowShell).putBoolean("autostart", autostart)
         .apply()
 
+    private const val MAX_SESSIONS = 64
+    private fun sp(c: Context): SharedPreferences = c.getSharedPreferences("mcp_sessions", Context.MODE_PRIVATE)
+
+    /** MCP sessions issued so far (session id -> client), so a request keeps its client across service restarts. */
+    fun sessions(c: Context): Map<String, McpClient> = sp(c).all.mapNotNull { (sid, v) ->
+        runCatching { org.json.JSONObject(v as String) }.getOrNull()?.let { sid to McpClient(it.optString("n"), it.optString("v")) }
+    }.toMap()
+
+    @Synchronized fun saveSession(c: Context, sid: String, client: McpClient) {
+        val all = sp(c).all
+        val e = sp(c).edit()
+        if (all.size >= MAX_SESSIONS) {
+            // Drop the oldest, so the list stays small.
+            all.entries.sortedBy { runCatching { org.json.JSONObject(it.value as String).optLong("t") }.getOrDefault(0L) }
+                .take(all.size - MAX_SESSIONS + 1).forEach { e.remove(it.key) }
+        }
+        e.putString(sid, org.json.JSONObject().put("n", client.name).put("v", client.version)
+            .put("t", System.currentTimeMillis()).toString()).apply()
+    }
+
+    fun removeSession(c: Context, sid: String) = sp(c).edit().remove(sid).apply()
+
+    /** The last client that connected, for requests without a (known) session id. */
+    fun lastClient(c: Context) = McpClient(p(c).getString("last_client", "")!!, p(c).getString("last_client_version", "")!!)
+    fun setLastClient(c: Context, client: McpClient) =
+        p(c).edit().putString("last_client", client.name).putString("last_client_version", client.version).apply()
+
     fun publicUrl(c: Context): String? {
         val r = relayUrl(c)
         if (r.isEmpty() || !relayEnabled(c)) return null
@@ -229,6 +256,10 @@ object Status {
     @Volatile var startedAt: Long = 0
     /** The tool call in progress right now (for the Home "Now" card), or null. */
     @Volatile var current: Doing? = null
-    /** Name of the last MCP client that connected (from initialize), e.g. "claude-code 2.1". */
-    @Volatile var client: String = ""
+}
+
+/** An MCP client as it named itself in initialize (clientInfo), e.g. "claude-code" "2.1.3". */
+data class McpClient(val name: String, val version: String = "") {
+    /** For the activity log: "claude-code 2.1.3". */
+    val label: String get() = listOf(name, version).filter { it.isNotBlank() }.joinToString(" ")
 }
