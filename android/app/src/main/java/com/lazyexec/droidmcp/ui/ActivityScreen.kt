@@ -45,11 +45,13 @@ fun ActivityScreen(state: AppState) {
     var confirmClear by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<AiEvent?>(null) }
     detail?.let { EventSheet(it, state) { detail = null } }
-    val shown = if (filter == 1) events.filter { it.ok == false } else events
+    // Up to 5,000 events: filter, count and group them only when the list, the filter or the day changes,
+    // not on every recomposition (the screen refreshes every second).
+    val shown = remember(events, filter) { if (filter == 1) events.filter { it.ok == false } else events }
     val todayStart = startOfDay(System.currentTimeMillis())
-    val today = events.count { it.time >= todayStart }
-    val errors = events.count { it.ok == false }
-    val grouped = shown.groupBy { startOfDay(it.time) }
+    val today = remember(events, todayStart) { events.count { it.time >= todayStart } }
+    val errors = remember(events) { events.count { it.ok == false } }
+    val grouped = remember(shown) { shown.groupBy { startOfDay(it.time) } }
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
@@ -118,7 +120,8 @@ fun ActivityScreen(state: AppState) {
 @Composable
 private fun TimedEventRow(e: AiEvent, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(e.time)),
+        val clock = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+        Text(clock.format(Date(e.time)),
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 10.dp))
         Column(Modifier.weight(1f)) { EventRow(e, onClick) }

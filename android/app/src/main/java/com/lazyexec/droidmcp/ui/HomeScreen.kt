@@ -54,7 +54,9 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -79,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lazyexec.droidmcp.AiEvent
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private enum class Power { OFF, CONNECTING, LIVE, LOCAL, ERROR }
@@ -119,9 +122,9 @@ fun HomeScreen(
         item { Header(ui) }
         item { PowerHero(p, ui, ::toggle) }
         item {
-            val now = steadyNow(ui.now)
+            val (now, last) = steadyNow(ui.now)
             AnimatedVisibility(now != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
-                NowCard(now ?: lastNow.value)
+                NowCard(now ?: last)
             }
         }
         if (ui.running) item { Stats(ui) }
@@ -135,24 +138,26 @@ fun HomeScreen(
     }
 }
 
-private val lastNow = mutableStateOf("")
-
-/** Debounced "current action": quick actions don't flash the card; once shown it stays at least a second. */
+/**
+ * Debounced "current action": quick actions don't flash the card; once shown it stays at least a second.
+ * Returns (action to show or null, last action shown), the latter for the card's exit animation.
+ */
 @Composable
-private fun steadyNow(raw: String?): String? {
+private fun steadyNow(raw: String?): Pair<String?, String> {
     var shown by remember { mutableStateOf<String?>(null) }
-    var since by remember { mutableStateOf(0L) }
-    androidx.compose.runtime.LaunchedEffect(raw) {
+    var last by remember { mutableStateOf("") }
+    var since by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(raw) {
         if (raw != null) {
-            if (shown == null) kotlinx.coroutines.delay(400)
-            shown = raw; lastNow.value = raw; since = System.currentTimeMillis()
+            if (shown == null) delay(400)
+            shown = raw; last = raw; since = System.currentTimeMillis()
         } else if (shown != null) {
             val left = 1000 - (System.currentTimeMillis() - since)
-            if (left > 0) kotlinx.coroutines.delay(left)
+            if (left > 0) delay(left)
             shown = null
         }
     }
-    return shown
+    return shown to last
 }
 
 @Composable
