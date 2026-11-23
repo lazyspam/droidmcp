@@ -42,7 +42,8 @@ class RelayClient(
     @Volatile private var ws: WebSocket? = null
     @Volatile private var stopped = false
     @Volatile private var connected = false
-    private var backoffSec = 1L
+    /** Reset from OkHttp and network-callback threads, grown under the lock in [retry]. */
+    @Volatile private var backoffSec = 1L
     private var pendingRetry: ScheduledFuture<*>? = null
     private val netCallback = object : ConnectivityManager.NetworkCallback() {
         // The phone switched network (Wi-Fi ↔ mobile) or came back online: reconnect now, not after the backoff.

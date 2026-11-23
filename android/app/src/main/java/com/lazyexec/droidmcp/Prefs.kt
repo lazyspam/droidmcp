@@ -191,7 +191,8 @@ object ActivityLog {
     }
 
     private val lines = ArrayDeque<String>()
-    var listener: (() -> Unit)? = null
+    /** Set and cleared by the visible Activity on the main thread, invoked from server and tool threads. */
+    @Volatile var listener: (() -> Unit)? = null
 
     @Synchronized fun add(s: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
