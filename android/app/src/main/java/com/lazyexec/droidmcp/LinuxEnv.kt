@@ -36,6 +36,7 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
     private val tmp = File(base, "tmp")
     private val ready = File(base, ".installed")
     private val nativeDir = File(ctx.applicationInfo.nativeLibraryDir)
+    private val lock = locks.getValue(distro)
 
     // Check real directories, not symlinks like bin/sh (absolute links resolve against Android's own /bin).
     val installed: Boolean get() = ready.isFile && File(rootfs, "etc").isDirectory && File(rootfs, "usr/bin").isDirectory
@@ -48,8 +49,7 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
         .filter { it.isFile && !java.nio.file.Files.isSymbolicLink(it.toPath()) }.sumOf { it.length() }
 
     /** Removes the distro and everything installed in it. */
-    @Synchronized
-    fun uninstall() {
+    fun uninstall() = synchronized(lock) {
         ready.delete()
         base.deleteRecursively()
     }
@@ -91,9 +91,13 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
         }
     }
 
-    /** Downloads and unpacks the distro. Safe to call again; does nothing if already installed unless [force]. */
-    @Synchronized
-    fun setup(force: Boolean = false, progress: (String) -> Unit = {}): String {
+    /**
+     * Downloads and unpacks the distro. Safe to call again; does nothing if already installed unless [force].
+     * One setup per distro at a time, even across [LinuxEnv] instances (the AI and the Settings screen each make their own).
+     */
+    fun setup(force: Boolean = false, progress: (String) -> Unit = {}): String = synchronized(lock) { setupLocked(force, progress) }
+
+    private fun setupLocked(force: Boolean, progress: (String) -> Unit): String {
         if (installed && !force) return "${distro.label} is already installed."
         val proot = File(nativeDir, "libproot.so")
         if (!proot.exists()) throw ToolError("proot is missing from this build (${nativeDir.path}). Reinstall the app.")
@@ -223,6 +227,11 @@ class LinuxEnv(private val ctx: Context, val distro: Distro = Distro.ALPINE) {
             throw ToolError("Download failed: HTTP ${resp.code} for $url")
         }
         return resp.body!!.byteStream()
+    }
+
+    private companion object {
+        /** Per distro, shared by every instance: setup and uninstall of the same distro never overlap. */
+        val locks: Map<Distro, Any> = Distro.entries.associateWith { Any() }
     }
 }
 
