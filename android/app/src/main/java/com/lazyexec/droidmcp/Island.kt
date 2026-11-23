@@ -47,7 +47,16 @@ object Island {
     private var bubbleLp: WindowManager.LayoutParams? = null
     private var balloonLp: WindowManager.LayoutParams? = null
     private var pulse: ObjectAnimator? = null
-    private var active = 0
+
+    /**
+     * A tool call that is running now. Calls can overlap (several clients, or one client's parallel calls),
+     * so each keeps its own text: the balloon shows the newest one still running, never a finished one's.
+     * [thread]: the request thread that called [start]; its [finish] comes from the same thread.
+     */
+    private class Call(val thread: Long, val tool: String, val text: String, val icon: Int?, val logo: ClientLogos.Logo?)
+
+    /** Running calls, oldest first. Main thread only. Kept across a rebuild of the windows (the calls still run). */
+    private val calls = ArrayList<Call>()
     private var style = Prefs.IslandStyle()
     private var screenW = 0
     private var gapPx = 0
@@ -83,7 +92,8 @@ object Island {
     private fun detachNow() {
         for (v in listOf<View?>(balloon, bubble)) try { if (v != null) wm?.removeView(v) } catch (_: Exception) {}
         pulse?.cancel()
-        bubble = null; ring = null; logo = null; clientView = null; balloon = null; wm = null; bubbleLp = null; balloonLp = null; active = 0
+        // [calls] stays: a rebuild (accessibility service (re)connecting, a style change) doesn't end the running calls.
+        bubble = null; ring = null; logo = null; clientView = null; balloon = null; wm = null; bubbleLp = null; balloonLp = null; hiding = false
     }
 
     fun reattach(ctx: Context) { detach(); attach(ctx) }
@@ -92,39 +102,61 @@ object Island {
     fun preview(ctx: Context) {
         if (bubble == null) attach(ctx)
         main.postDelayed({
-            active++; main.removeCallbacks(collapse); balloonIcon = null; clientLogo = null; setState(State.BUSY, "Tap 540, 1200")
-            main.postDelayed({ active = 0; setState(State.OK, "Tap 540, 1200"); main.postDelayed(collapse, 1600) }, 1800)
+            if (calls.isNotEmpty()) return@postDelayed // a real call is showing; don't cover it
+            main.removeCallbacks(collapse); balloonIcon = null; clientLogo = null; setState(State.BUSY, "Tap 540, 1200")
+            main.postDelayed({
+                if (calls.isNotEmpty()) return@postDelayed
+                setState(State.OK, "Tap 540, 1200"); main.postDelayed(collapse, 1600)
+            }, 1800)
         }, 150)
     }
 
     /** [client]: the acting client's name from its clientInfo, for its logo. */
     fun start(tool: String, args: JSONObject, client: String = "") {
         val text = describe(tool, args)
+        val thread = Thread.currentThread().id
         main.post {
-            balloonIcon = balloon?.let { icon(it.context, tool, args) }
-            clientLogo = ClientLogos.of(client)
+            val ctx = appCtx ?: balloon?.context
+            calls += Call(thread, tool, text, ctx?.let { icon(it, tool, args) }, ClientLogos.of(client))
             settle?.let { main.removeCallbacks(it); settle = null }
-            active++
             main.removeCallbacks(collapse)
-            setState(State.BUSY, text)
+            showNewest()
         }
     }
 
     private var settle: Runnable? = null
 
-    fun finish(tool: String, ok: Boolean) = main.post {
-        active = (active - 1).coerceAtLeast(0)
-        if (active > 0) return@post
-        // Wait a moment before showing "done": AI actions often come back-to-back, and flipping
-        // busy → ✓ → busy within a few hundred ms reads as a blink.
-        settle?.let { main.removeCallbacks(it) }
-        val text = balloon?.text?.toString()?.removePrefix("✓  ").orEmpty()
-        settle = Runnable {
-            settle = null
-            if (active > 0) return@Runnable
-            if (ok) setState(State.OK, text) else setState(State.ERROR, "$tool failed")
-            main.postDelayed(collapse, if (ok) 1400 else 3500)
-        }.also { main.postDelayed(it, if (ok) 350 else 0) }
+    fun finish(tool: String, ok: Boolean) {
+        val thread = Thread.currentThread().id
+        main.post {
+            // This request's own call; by tool name only if it somehow came from another thread.
+            val i = calls.indexOfLast { it.thread == thread && it.tool == tool }.takeIf { it >= 0 }
+                ?: calls.indexOfLast { it.tool == tool }.takeIf { it >= 0 }
+                ?: return@post
+            val done = calls.removeAt(i)
+            if (calls.isNotEmpty()) {
+                // Others still run: show the newest of them, not the one that just ended.
+                showNewest()
+                return@post
+            }
+            // Wait a moment before showing "done": AI actions often come back-to-back, and flipping
+            // busy → ✓ → busy within a few hundred ms reads as a blink.
+            settle?.let { main.removeCallbacks(it) }
+            settle = Runnable {
+                settle = null
+                if (calls.isNotEmpty()) return@Runnable
+                balloonIcon = done.icon; clientLogo = done.logo
+                if (ok) setState(State.OK, done.text) else setState(State.ERROR, "$tool failed")
+                main.postDelayed(collapse, if (ok) 1400 else 3500)
+            }.also { main.postDelayed(it, if (ok) 350 else 0) }
+        }
+    }
+
+    /** Shows the newest running call as busy (main thread). */
+    private fun showNewest() {
+        val c = calls.lastOrNull() ?: return
+        balloonIcon = c.icon; clientLogo = c.logo
+        setState(State.BUSY, c.text)
     }
 
     /** Where the bubble (and its balloon, if showing) sit on screen, in pixels, for telling the AI to ignore them. */
@@ -221,7 +253,8 @@ object Island {
         wm = w; bubble = bub; ring = r; logo = face; clientView = clientImg; balloon = b; bubbleLp = uLp; balloonLp = bLp
         applyOpacityNow()
         enableDrag(bub, uLp, w, ctx, size, edge)
-        setState(State.IDLE, "")
+        // Rebuilt while calls run (e.g. the accessibility service connected mid-call): keep showing them.
+        if (calls.isNotEmpty()) showNewest() else setState(State.IDLE, "")
     }
 
     /** Keeps the balloon beside the bubble, opening towards the middle of the screen. */
