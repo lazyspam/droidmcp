@@ -45,7 +45,8 @@ jobs:
       - name: Name APKs
         run: |
           mkdir -p out
-          V="${GITHUB_REF_NAME#v}"
+          # tags name the APK by version; branches and PRs by commit (a PR ref has a slash)
+          if [ "$GITHUB_REF_TYPE" = tag ]; then V="${GITHUB_REF_NAME#v}"; else V="${GITHUB_SHA::7}"; fi
           cp app/build/outputs/apk/release/app-release.apk "out/DroidMCP-${V}.apk"
           cp app/build/outputs/apk/debug/app-debug.apk "out/DroidMCP-${V}-debug.apk"
 
