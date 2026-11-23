@@ -26,7 +26,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * The activity "island", drawn as a chat head: a round bubble on the screen edge with a status ring,
- * and a chat balloon that pops out beside it saying what the AI is doing.
+ * and a chat balloon that pops out beside it saying what the AI is doing. While an AI acts, the droid's face
+ * gives way to that client's logo (see [ClientLogos]); clients without one keep the droid.
  * Drag it anywhere; on release it snaps to the nearest edge. Tap it to open the app.
  * While the AI acts, touches pass through it so the AI's taps never land on it.
  * It hides itself during screenshots, so the AI never sees it.
@@ -36,6 +37,9 @@ object Island {
     private var bubble: FrameLayout? = null
     private var ring: View? = null
     private var logo: LogoView? = null
+    private var clientView: android.widget.ImageView? = null
+    /** Logo of the client whose action shows now, or null (the droid). */
+    private var clientLogo: ClientLogos.Logo? = null
     private var balloon: TextView? = null
     /** Drawn before the balloon text while the current action shows (busy and done), e.g. the distro of linux_exec. */
     private var balloonIcon: Int? = null
@@ -79,7 +83,7 @@ object Island {
     private fun detachNow() {
         for (v in listOf<View?>(balloon, bubble)) try { if (v != null) wm?.removeView(v) } catch (_: Exception) {}
         pulse?.cancel()
-        bubble = null; ring = null; logo = null; balloon = null; wm = null; bubbleLp = null; balloonLp = null; active = 0
+        bubble = null; ring = null; logo = null; clientView = null; balloon = null; wm = null; bubbleLp = null; balloonLp = null; active = 0
     }
 
     fun reattach(ctx: Context) { detach(); attach(ctx) }
@@ -88,15 +92,17 @@ object Island {
     fun preview(ctx: Context) {
         if (bubble == null) attach(ctx)
         main.postDelayed({
-            active++; main.removeCallbacks(collapse); balloonIcon = null; setState(State.BUSY, "Tap 540, 1200")
+            active++; main.removeCallbacks(collapse); balloonIcon = null; clientLogo = null; setState(State.BUSY, "Tap 540, 1200")
             main.postDelayed({ active = 0; setState(State.OK, "Tap 540, 1200"); main.postDelayed(collapse, 1600) }, 1800)
         }, 150)
     }
 
-    fun start(tool: String, args: JSONObject) {
+    /** [client]: the acting client's name from its clientInfo, for its logo. */
+    fun start(tool: String, args: JSONObject, client: String = "") {
         val text = describe(tool, args)
         main.post {
             balloonIcon = balloon?.let { icon(it.context, tool, args) }
+            clientLogo = ClientLogos.of(client)
             settle?.let { main.removeCallbacks(it); settle = null }
             active++
             main.removeCallbacks(collapse)
@@ -196,6 +202,8 @@ object Island {
         bub.addView(r, FrameLayout.LayoutParams(size, size))
         val face = LogoView(ctx)
         bub.addView(face, FrameLayout.LayoutParams((size * 0.92f).toInt(), (size * 0.92f).toInt(), Gravity.CENTER))
+        val clientImg = android.widget.ImageView(ctx).apply { visibility = View.GONE }
+        bub.addView(clientImg, FrameLayout.LayoutParams((size * 0.5f).toInt(), (size * 0.5f).toInt(), Gravity.CENTER))
         val edge = dp(ctx, 6f)
         val uLp = WindowManager.LayoutParams(
             size, size, type,
@@ -210,7 +218,7 @@ object Island {
 
         w.addView(b, bLp)
         w.addView(bub, uLp)
-        wm = w; bubble = bub; ring = r; logo = face; balloon = b; bubbleLp = uLp; balloonLp = bLp
+        wm = w; bubble = bub; ring = r; logo = face; clientView = clientImg; balloon = b; bubbleLp = uLp; balloonLp = bLp
         applyOpacityNow()
         enableDrag(bub, uLp, w, ctx, size, edge)
         setState(State.IDLE, "")
@@ -332,6 +340,7 @@ object Island {
                 State.ERROR -> LogoView.Mood.ERROR
             }
         }
+        showClientLogo(if (s == State.BUSY || s == State.OK) clientLogo else null)
         if (s == State.BUSY) {
             // Slow, shallow "breathing" instead of a strobe.
             pulse = ObjectAnimator.ofFloat(r, "alpha", 1f, 0.55f).apply {
@@ -376,6 +385,19 @@ object Island {
                 b.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(OvershootInterpolator(1.6f)).start()
             }
         }
+    }
+
+    /** The client's logo in place of the droid, or the droid again for null. The ring keeps showing the state. */
+    private fun showClientLogo(l: ClientLogos.Logo?) {
+        val v = clientView ?: return
+        if (l == null) {
+            v.visibility = View.GONE; logo?.visibility = View.VISIBLE
+            return
+        }
+        v.setImageResource(l.res)
+        // The bubble is always dark: single-colour logos in white, brand-coloured ones as they are.
+        if (l.tinted) v.setColorFilter(Color.WHITE) else v.clearColorFilter()
+        v.visibility = View.VISIBLE; logo?.visibility = View.INVISIBLE
     }
 
     private fun setBalloonIcon(b: TextView, res: Int?) {

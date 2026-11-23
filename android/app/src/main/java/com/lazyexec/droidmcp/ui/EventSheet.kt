@@ -61,7 +61,7 @@ fun EventSheet(e: AiEvent, state: AppState, onDismiss: () -> Unit) {
                 Fact("When", SimpleDateFormat("EEE d MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date(e.time)))
                 Fact("Duration", duration(e.ms))
                 Fact("Tool", e.tool)
-                if (e.client.isNotBlank()) Fact("AI client", e.client)
+                if (e.client.isNotBlank()) Fact("AI client", e.client) { ClientLogo(e.client, 18, MaterialTheme.colorScheme.onSurface) }
             }
             if (e.args.isNotBlank() && e.args != "{}") Block("Arguments", e.args) { state.copy("arguments", e.args) }
             if (e.result.isNotBlank()) Block(if (e.ok == false) "Error" else "Result", e.result) { state.copy("result", e.result) }
@@ -74,10 +74,11 @@ fun EventSheet(e: AiEvent, state: AppState, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun Fact(label: String, value: String) {
-    Row {
+private fun Fact(label: String, value: String, icon: (@Composable () -> Unit)? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.width(96.dp))
+        icon?.let { it(); Spacer(Modifier.width(8.dp)) }
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }

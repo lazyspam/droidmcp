@@ -461,7 +461,7 @@ private fun SetupCard(ui: UiSnapshot) {
 }
 
 @Composable
-fun EventRow(e: AiEvent, onClick: (() -> Unit)? = null) {
+fun EventRow(e: AiEvent, showClient: Boolean = false, onClick: (() -> Unit)? = null) {
     val color = when (e.ok) { true -> StatusColors.live; false -> StatusColors.error; null -> StatusColors.busy }
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -476,6 +476,11 @@ fun EventRow(e: AiEvent, onClick: (() -> Unit)? = null) {
         Text(e.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
+        // The client sits at the end, apart from the distro icon before the text.
+        if (showClient) {
+            ClientLogo(e.client, 16)
+            Spacer(Modifier.width(8.dp))
+        }
         Text(ago(e.time), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

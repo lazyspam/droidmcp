@@ -128,7 +128,7 @@ private fun TimedEventRow(e: AiEvent, onClick: () -> Unit) {
         Text(clock.format(Date(e.time)),
             style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(end = 10.dp))
-        Column(Modifier.weight(1f)) { EventRow(e, onClick) }
+        Column(Modifier.weight(1f)) { EventRow(e, showClient = true, onClick = onClick) }
     }
 }
 

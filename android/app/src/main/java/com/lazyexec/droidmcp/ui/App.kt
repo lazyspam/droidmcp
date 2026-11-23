@@ -58,6 +58,7 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         val ctx = androidx.compose.ui.platform.LocalContext.current
         androidx.compose.material3.AlertDialog(
             onDismissRequest = {},
+            icon = { ClientLogo(p.client, 40, androidx.compose.material3.MaterialTheme.colorScheme.onSurface) },
             title = { Text("Allow ${p.client}?") },
             text = { Text("${p.client} wants to control this phone: screen, input, apps and shell. Only allow AI clients you started yourself.") },
             confirmButton = {
