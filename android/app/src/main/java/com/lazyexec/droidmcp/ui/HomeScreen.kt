@@ -334,7 +334,9 @@ private fun ConnectCard(state: AppState) {
     var more by rememberSaveable { mutableStateOf(false) }
     var reveal by rememberSaveable { mutableStateOf(false) }
     Card(shape = RoundedCornerShape(Radius.large), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(20.dp)) {
+        // Less padding at the bottom: the "More options" button's 48dp touch target already
+        // leaves space under its label, so the gap matches the one above the title.
+        Column(Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 10.dp)) {
             Text("Connect your AI", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             if (!com.lazyexec.droidmcp.Prefs.requireToken(LocalContext.current)) {
                 Text("Token is off: anyone with this URL can control your phone.", style = MaterialTheme.typography.bodySmall,
@@ -350,7 +352,7 @@ private fun ConnectCard(state: AppState) {
                 Text(if (more) "Fewer options" else "More options")
             }
             AnimatedVisibility(more) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     CopyRow("Claude Code command", "claude mcp add …") { state.copy("claude command", state.claudeCommand()) }
                     CopyRow("URL", ui.publicUrl ?: "–") { ui.publicUrl?.let { state.copy("url", it) } }
                     Row(verticalAlignment = Alignment.CenterVertically) {
