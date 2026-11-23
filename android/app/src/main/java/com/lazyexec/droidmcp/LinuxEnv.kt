@@ -268,11 +268,7 @@ object Tar {
             longName?.let { name = it }; longName = null
             longLink?.let { link = it }; longLink = null
 
-            val out = File(root, name).canonicalFile.let { f ->
-                // Refuse entries that escape the target directory (../ tricks).
-                if (f != root && !f.path.startsWith(root.path + File.separator)) throw IllegalStateException("unsafe path in archive: $name")
-                File(root, name.trimEnd('/'))
-            }
+            val out = inside(root, name)
             when (type) {
                 '5' -> { out.mkdirs(); chmod(out, mode) }
                 '2' -> {
@@ -280,7 +276,7 @@ object Tar {
                     out.delete()
                     Os.symlink(link, out.path)
                 }
-                '1' -> hardlinks += out to File(root, link)
+                '1' -> hardlinks += out to inside(root, link, resolveLast = false)
                 '0', '\u0000', '7' -> {
                     out.parentFile?.mkdirs()
                     out.delete()
@@ -296,11 +292,26 @@ object Tar {
         for ((link, target) in hardlinks) {
             link.parentFile?.mkdirs()
             link.delete()
-            if (target.exists()) {
+            // A hardlink to a symlink becomes the same symlink: copying would read through it, maybe outside the rootfs.
+            if (java.nio.file.Files.isSymbolicLink(target.toPath())) {
+                Os.symlink(Os.readlink(target.path), link.path)
+            } else if (target.exists()) {
                 target.copyTo(link, overwrite = true)
                 chmod(link, Os.stat(target.path).st_mode and 0x1ff)
             }
         }
+    }
+
+    /**
+     * [name] under [root]; refuses entries that escape it (../ tricks), for entries and hardlink targets alike.
+     * With [resolveLast] false only the parent is resolved: a hardlink may name a symlink whose own target is outside
+     * (it is recreated as a symlink, not read through).
+     */
+    private fun inside(root: File, name: String, resolveLast: Boolean = true): File {
+        val plain = File(root, name.trimEnd('/'))
+        val f = if (resolveLast || plain.name == "..") plain.canonicalFile else File(plain.parentFile!!.canonicalFile, plain.name)
+        if (f != root && !f.path.startsWith(root.path + File.separator)) throw IllegalStateException("unsafe path in archive: $name")
+        return plain
     }
 
     private fun chmod(f: File, mode: Int) = try { Os.chmod(f.path, mode and 0x1ff) } catch (_: Exception) {}
