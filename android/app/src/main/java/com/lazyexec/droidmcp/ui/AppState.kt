@@ -29,6 +29,8 @@ data class UiSnapshot(
     val rootText: String = "not checked",
     val error: String? = null,
     val publicUrl: String? = null,
+    /** http://<Wi-Fi IPv4>:<port>/mcp (PHONE_IP when there is none); used when there is no relay URL. */
+    val localUrl: String = "",
     val token: String = "",
     val deviceId: String = "",
     val events: List<AiEvent> = emptyList(),
@@ -45,7 +47,17 @@ data class UiSnapshot(
 ) {
     val connected get() = running && relay == "connected"
     val connecting get() = running && !connected && publicUrl != null
+    /** The URL AI clients should use: the relay one, else the local one. */
+    val mcpUrl get() = publicUrl ?: localUrl
 }
+
+/** The phone's Wi-Fi IPv4 address, or null when it has none. */
+private fun wifiIpv4(): String? = runCatching {
+    java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+        .filter { it.isUp && !it.isLoopback && it.name.startsWith("wlan") }
+        .flatMap { it.inetAddresses.toList() }
+        .firstOrNull { it is java.net.Inet4Address && !it.isLoopbackAddress }?.hostAddress
+}.getOrNull()
 
 class AppState(private val ctx: Context) {
     var ui by mutableStateOf(UiSnapshot())
@@ -53,6 +65,8 @@ class AppState(private val ctx: Context) {
 
     private var eventsVersion = -1L
     private var cachedEvents: List<AiEvent> = emptyList()
+    private var ipAt = 0L
+    private var cachedIp: String? = null
     private var crashStamp = -1L
     private var cachedCrash: String? = null
 
@@ -69,6 +83,9 @@ class AppState(private val ctx: Context) {
 
     fun refresh() {
         if (ActivityLog.version != eventsVersion) { eventsVersion = ActivityLog.version; cachedEvents = ActivityLog.events() }
+        val publicUrl = Prefs.publicUrl(ctx)
+        // Looked up only without a relay URL, and at most every 5 s (refresh runs every second on the main thread).
+        if (publicUrl == null && System.currentTimeMillis() - ipAt > 5_000) { ipAt = System.currentTimeMillis(); cachedIp = wifiIpv4() }
         ui = UiSnapshot(
             running = Status.running,
             relay = Status.relay,
@@ -76,7 +93,8 @@ class AppState(private val ctx: Context) {
             root = Shell.rootState == true,
             rootText = if (Shell.rootState == true) "granted" else Status.root,
             error = Status.error,
-            publicUrl = Prefs.publicUrl(ctx),
+            publicUrl = publicUrl,
+            localUrl = "http://${cachedIp ?: "PHONE_IP"}:${Prefs.localPort(ctx)}/mcp",
             token = Prefs.token(ctx),
             deviceId = Prefs.deviceName(ctx),
             events = cachedEvents,
@@ -95,13 +113,13 @@ class AppState(private val ctx: Context) {
     }
 
     fun clientJson(): String {
-        val url = ui.publicUrl ?: "http://PHONE_IP:${Prefs.localPort(ctx)}/mcp"
+        val url = ui.mcpUrl
         if (!Prefs.requireToken(ctx)) return """{"mcpServers":{"android":{"type":"http","url":"$url"}}}"""
         return """{"mcpServers":{"android":{"type":"http","url":"$url","headers":{"Authorization":"Bearer ${ui.token}"}}}}"""
     }
 
     fun claudeCommand(): String {
-        val url = ui.publicUrl ?: "http://PHONE_IP:${Prefs.localPort(ctx)}/mcp"
+        val url = ui.mcpUrl
         if (!Prefs.requireToken(ctx)) return "claude mcp add --transport http android $url"
         return "claude mcp add --transport http android $url --header \"Authorization: Bearer ${ui.token}\""
     }

@@ -9,6 +9,18 @@ object Prefs {
 
     private fun p(c: Context): SharedPreferences = c.getSharedPreferences("droidmcp", Context.MODE_PRIVATE)
 
+    /** How AI clients reach the phone: through the relay, the local server, or both. */
+    const val MODE_RELAY = "relay"
+    const val MODE_LOCAL = "local"
+    const val MODE_BOTH = "both"
+
+    /** Not set yet (new install or older version): relay, or local when there is no relay URL. */
+    fun connectionMode(c: Context): String =
+        p(c).getString("connection_mode", null)?.takeIf { it == MODE_RELAY || it == MODE_LOCAL || it == MODE_BOTH }
+            ?: if (relayUrl(c).isEmpty()) MODE_LOCAL else MODE_RELAY
+    fun setConnectionMode(c: Context, mode: String) = p(c).edit().putString("connection_mode", mode).apply()
+    fun relayEnabled(c: Context) = connectionMode(c) != MODE_LOCAL
+
     fun token(c: Context): String {
         p(c).getString("token", null)?.let { return it }
         return newToken(c)
@@ -48,7 +60,8 @@ object Prefs {
         val bytes = ByteArray(n).also { SecureRandom().nextBytes(it) }
         return bytes.joinToString("") { "%02x".format(it) }
     }
-    fun localEnabled(c: Context) = p(c).getBoolean("local_enabled", true)
+    /** Local server runs in "local" and "both" connection modes. */
+    fun localEnabled(c: Context) = connectionMode(c) != MODE_RELAY
     fun localPort(c: Context) = p(c).getInt("local_port", 8765)
     fun allowShell(c: Context) = p(c).getBoolean("allow_shell", true)
     fun autostart(c: Context) = p(c).getBoolean("autostart", false)
@@ -114,7 +127,7 @@ object Prefs {
 
     fun publicUrl(c: Context): String? {
         val r = relayUrl(c)
-        if (r.isEmpty()) return null
+        if (r.isEmpty() || !relayEnabled(c)) return null
         val http = r.replaceFirst(Regex("^wss://"), "https://").replaceFirst(Regex("^ws://"), "http://")
         return "$http/d/${deviceName(c)}/mcp"
     }

@@ -351,7 +351,7 @@ private fun ConnectCard(state: AppState) {
                 Text("Token is off: anyone with this URL can control your phone.", style = MaterialTheme.typography.bodySmall,
                     color = StatusColors.warn, modifier = Modifier.padding(vertical = 4.dp))
             }
-            Text(ui.publicUrl ?: "Local network only", fontFamily = Mono, style = MaterialTheme.typography.bodySmall,
+            Text(ui.mcpUrl, fontFamily = Mono, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(14.dp))
             Button(onClick = { state.copy("mcp config", state.clientJson()) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
@@ -363,7 +363,7 @@ private fun ConnectCard(state: AppState) {
             AnimatedVisibility(more) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                     CopyRow("Claude Code command", "claude mcp add …") { state.copy("claude command", state.claudeCommand()) }
-                    CopyRow("URL", ui.publicUrl ?: "–") { ui.publicUrl?.let { state.copy("url", it) } }
+                    CopyRow("URL", ui.mcpUrl) { state.copy("url", ui.mcpUrl) }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) {
                             CopyRow("Token", if (reveal) ui.token else "•".repeat(16)) { state.copy("token", ui.token) }

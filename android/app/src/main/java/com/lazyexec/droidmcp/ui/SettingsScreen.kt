@@ -6,6 +6,9 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -44,6 +47,11 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -211,46 +219,100 @@ private fun Section(title: String?, content: @Composable () -> Unit) {
 
 // ---------------------------------------------------------------- pages
 
+private data class ConnectionMode(val id: String, val title: String, val description: String)
+
+private val connectionModes = listOf(
+    ConnectionMode(Prefs.MODE_RELAY, "Relay", "Reach the phone from anywhere through the relay"),
+    ConnectionMode(Prefs.MODE_LOCAL, "Local", "Wi-Fi, Tailscale or adb only. Nothing leaves your network"),
+    ConnectionMode(Prefs.MODE_BOTH, "Relay & local", "Both: the relay from anywhere, and the local server nearby"),
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConnectionPage(state: AppState, restart: () -> Unit) {
     val ctx = LocalContext.current
+    var mode by remember { mutableStateOf(Prefs.connectionMode(ctx)) }
     var relay by remember { mutableStateOf(Prefs.relayUrl(ctx)) }
     var key by remember { mutableStateOf(Prefs.agentKey(ctx)) }
     var device by remember { mutableStateOf(Prefs.deviceName(ctx)) }
-    var localOn by remember { mutableStateOf(Prefs.localEnabled(ctx)) }
     var port by remember { mutableStateOf(Prefs.localPort(ctx).toString()) }
+    var menu by remember { mutableStateOf(false) }
 
-    val relayErr = if (relay.isNotBlank() && !relay.trim().matches(Regex("^(https?|wss?)://[^\\s/]+.*", RegexOption.IGNORE_CASE)))
-        "Must start with https://" else null
-    val deviceErr = if (!device.trim().matches(Regex("[A-Za-z0-9_-]{3,64}"))) "3–64 letters, digits, - or _" else null
+    val relayOn = mode != Prefs.MODE_LOCAL
+    val localOn = mode != Prefs.MODE_RELAY
+    // Hidden fields keep their values (and stay stored), but are not checked.
+    val relayErr = if (!relayOn) null
+        else if (relay.isBlank()) "Needed for the relay"
+        else if (!relay.trim().matches(Regex("^(https?|wss?)://[^\\s/]+.*", RegexOption.IGNORE_CASE))) "Must start with https://"
+        else null
+    val deviceErr = if (relayOn && !device.trim().matches(Regex("[A-Za-z0-9_-]{3,64}"))) "3–64 letters, digits, - or _" else null
     val portNum = port.toIntOrNull()
     val portErr = if (localOn && (portNum == null || portNum !in 1024..65535)) "1024–65535" else null
-    val dirty = relay.trim() != Prefs.relayUrl(ctx) || key.trim() != Prefs.agentKey(ctx) || device.trim() != Prefs.deviceName(ctx) ||
-        localOn != Prefs.localEnabled(ctx) || (localOn && portNum != Prefs.localPort(ctx))
+    val dirty = mode != Prefs.connectionMode(ctx) ||
+        (relayOn && (relay.trim() != Prefs.relayUrl(ctx) || key.trim() != Prefs.agentKey(ctx) || device.trim() != Prefs.deviceName(ctx))) ||
+        (localOn && portNum != Prefs.localPort(ctx))
     val valid = relayErr == null && deviceErr == null && portErr == null
+    val current = connectionModes.first { it.id == mode }
 
-    Section("Relay") {
-        OutlinedTextField(relay, { relay = it }, label = { Text("Relay URL") }, singleLine = true,
-            isError = relayErr != null, supportingText = { Text(relayErr ?: "Where your AI reaches this phone") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(key, { key = it }, label = { Text("Agent key") }, singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            supportingText = { Text("Only for private relays. Leave empty for public ones.") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(device, { device = it }, label = { Text("Device ID") }, singleLine = true,
-            isError = deviceErr != null, supportingText = { Text(deviceErr ?: "Part of your URL") }, modifier = Modifier.fillMaxWidth())
-    }
-    Section("Direct access") {
-        SwitchRow("Local server", "Reach the phone on Wi-Fi, Tailscale or adb without the relay", localOn, padded = false) { localOn = it }
-        if (localOn) {
-            OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
-                isError = portErr != null, supportingText = { portErr?.let { Text(it) } },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+    // One child of the page column: hidden sections leave no extra gap, each shown one brings its own.
+    Column {
+        Section("Connection type") {
+            ExposedDropdownMenuBox(expanded = menu, onExpandedChange = { menu = it }) {
+                OutlinedTextField(current.title, {}, readOnly = true, singleLine = true, label = { Text("Connection type") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = menu) },
+                    supportingText = { Text(current.description) },
+                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth())
+                ExposedDropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    connectionModes.forEach { m ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(m.title, style = MaterialTheme.typography.bodyLarge)
+                                    Text(m.description, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            },
+                            onClick = { mode = m.id; menu = false },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
+                }
+            }
+        }
+        AnimatedVisibility(relayOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column(Modifier.padding(top = 14.dp)) {
+                Section("Relay") {
+                    OutlinedTextField(relay, { relay = it }, label = { Text("Relay URL") }, singleLine = true,
+                        isError = relayErr != null, supportingText = { Text(relayErr ?: "Where your AI reaches this phone") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(key, { key = it }, label = { Text("Agent key") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        supportingText = { Text("Only for private relays. Leave empty for public ones.") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(device, { device = it }, label = { Text("Device ID") }, singleLine = true,
+                        isError = deviceErr != null, supportingText = { Text(deviceErr ?: "Part of your URL") }, modifier = Modifier.fillMaxWidth())
+                }
+            }
+        }
+        AnimatedVisibility(localOn, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            Column(Modifier.padding(top = 14.dp)) {
+                Section("Local server") {
+                    OutlinedTextField(port, { port = it.filter(Char::isDigit).take(5) }, label = { Text("Port") }, singleLine = true,
+                        isError = portErr != null, supportingText = { Text(portErr ?: "Reach the phone on Wi-Fi, Tailscale or adb") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+                }
+            }
         }
     }
     // Only offered when something changed: no dead buttons.
     if (dirty) {
         Button(onClick = {
-            Prefs.save(ctx, relay.trim(), key.trim(), device.trim(), localOn, portNum ?: 8765, Prefs.allowShell(ctx), Prefs.autostart(ctx))
+            // Hidden fields are saved as they are stored now, so switching back restores them.
+            val r = if (relayOn) relay.trim() else Prefs.relayUrl(ctx)
+            val k = if (relayOn) key.trim() else Prefs.agentKey(ctx)
+            val d = if (relayOn) device.trim() else Prefs.deviceName(ctx)
+            val pt = if (localOn) portNum ?: 8765 else Prefs.localPort(ctx)
+            Prefs.setConnectionMode(ctx, mode)
+            Prefs.save(ctx, r, k, d, localOn, pt, Prefs.allowShell(ctx), Prefs.autostart(ctx))
             if (Status.running) restart()
             state.refresh()
         }, enabled = valid, modifier = Modifier.fillMaxWidth().height(54.dp)) {

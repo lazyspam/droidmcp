@@ -101,7 +101,9 @@ class McpService : Service() {
         }
 
         val url = Prefs.relayUrl(this)
-        if (url.isNotEmpty()) {
+        if (!Prefs.relayEnabled(this)) {
+            Status.relay = "off"
+        } else if (url.isNotEmpty()) {
             relay = RelayClient(this, url, Prefs.agentKey(this), Prefs.deviceName(this), Prefs.deviceSecret(this), mcp) { s ->
                 Status.relay = s
                 ActivityLog.listener?.invoke()
