@@ -37,6 +37,8 @@ object Island {
     private var ring: View? = null
     private var logo: LogoView? = null
     private var balloon: TextView? = null
+    /** Drawn before the balloon text while the current action shows (busy and done), e.g. the distro of linux_exec. */
+    private var balloonIcon: Int? = null
     private var wm: WindowManager? = null
     private var bubbleLp: WindowManager.LayoutParams? = null
     private var balloonLp: WindowManager.LayoutParams? = null
@@ -86,7 +88,7 @@ object Island {
     fun preview(ctx: Context) {
         if (bubble == null) attach(ctx)
         main.postDelayed({
-            active++; main.removeCallbacks(collapse); setState(State.BUSY, "Tap 540, 1200")
+            active++; main.removeCallbacks(collapse); balloonIcon = null; setState(State.BUSY, "Tap 540, 1200")
             main.postDelayed({ active = 0; setState(State.OK, "Tap 540, 1200"); main.postDelayed(collapse, 1600) }, 1800)
         }, 150)
     }
@@ -94,6 +96,7 @@ object Island {
     fun start(tool: String, args: JSONObject) {
         val text = describe(tool, args)
         main.post {
+            balloonIcon = balloon?.let { icon(it.context, tool, args) }
             settle?.let { main.removeCallbacks(it); settle = null }
             active++
             main.removeCallbacks(collapse)
@@ -358,6 +361,7 @@ object Island {
             }
         } else {
             b.text = showText
+            setBalloonIcon(b, if (s == State.ERROR) null else balloonIcon)
             placeBalloon()
             if (hiding) {
                 // A new action arrived mid-fade: cancel the fade and snap back to fully shown.
@@ -372,6 +376,25 @@ object Island {
                 b.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(240).setInterpolator(OvershootInterpolator(1.6f)).start()
             }
         }
+    }
+
+    private fun setBalloonIcon(b: TextView, res: Int?) {
+        val d = res?.let { b.context.getDrawable(it) }?.apply {
+            val px = (b.textSize * 1.25f).toInt()
+            setBounds(0, 0, px, px)
+        }
+        b.compoundDrawablePadding = dp(b.context, 6f)
+        b.setCompoundDrawablesRelative(d, null, null, null)
+    }
+
+    /** Icon drawn before a tool call's description, or null: linux_exec shows the distro it runs in. */
+    @androidx.annotation.DrawableRes
+    fun icon(ctx: Context, tool: String, a: JSONObject): Int? = when (tool) {
+        "linux_exec" -> when (Distro.of(a.optString("distro")) ?: Prefs.defaultDistro(ctx)) {
+            Distro.ALPINE -> R.drawable.ic_session_alpine
+            Distro.UBUNTU -> R.drawable.ic_session_ubuntu
+        }
+        else -> null
     }
 
     /** Short human description of a tool call. */
@@ -394,7 +417,7 @@ object Island {
             "read_file" -> "Read ${s("path")}"
             "write_file" -> "Write ${s("path")}"
             "shell" -> "$ ${s("command")}"
-            "linux_exec" -> "🐧 ${a.optString("distro").takeIf { it.isNotBlank() }?.let { "$it: " } ?: ""}${s("command")}"
+            "linux_exec" -> "${a.optString("distro").takeIf { it.isNotBlank() }?.let { "$it: " } ?: ""}${s("command")}"
             "linux_setup" -> "Setting up Linux"
             "terminal_read" -> "Reading the terminal"
             "terminal_input" -> if (a.optBoolean("ctrl_c")) "Ctrl+C" else "Typing in the terminal"

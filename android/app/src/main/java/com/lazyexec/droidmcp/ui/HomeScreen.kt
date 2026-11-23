@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lazyexec.droidmcp.AiEvent
+import com.lazyexec.droidmcp.Doing
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -143,9 +144,9 @@ fun HomeScreen(
  * Returns (action to show or null, last action shown), the latter for the card's exit animation.
  */
 @Composable
-private fun steadyNow(raw: String?): Pair<String?, String> {
-    var shown by remember { mutableStateOf<String?>(null) }
-    var last by remember { mutableStateOf("") }
+private fun steadyNow(raw: Doing?): Pair<Doing?, Doing> {
+    var shown by remember { mutableStateOf<Doing?>(null) }
+    var last by remember { mutableStateOf(Doing("")) }
     var since by remember { mutableLongStateOf(0L) }
     LaunchedEffect(raw) {
         if (raw != null) {
@@ -266,7 +267,7 @@ private fun PowerGlyph(color: Color) {
 }
 
 @Composable
-private fun NowCard(text: String) {
+private fun NowCard(now: Doing) {
     Card(
         shape = RoundedCornerShape(Radius.large),
         colors = CardDefaults.cardColors(containerColor = StatusColors.busy.copy(alpha = 0.14f)),
@@ -277,7 +278,10 @@ private fun NowCard(text: String) {
             Spacer(Modifier.width(12.dp))
             Column {
                 Text("AI is working", style = MaterialTheme.typography.labelMedium, color = StatusColors.busy)
-                Text(text, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    now.icon?.let { ToolIcon(it, 18) }
+                    Text(now.text, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
@@ -468,7 +472,8 @@ fun EventRow(e: AiEvent, onClick: (() -> Unit)? = null) {
     ) {
         Box(Modifier.size(9.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(12.dp))
-        Text(e.text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        e.icon()?.let { ToolIcon(it, 16) }
+        Text(e.label, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f))
         Spacer(Modifier.width(8.dp))
         Text(ago(e.time), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

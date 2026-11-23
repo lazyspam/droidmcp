@@ -39,7 +39,7 @@ data class UiSnapshot(
     val overlay: Boolean = false,
     val crash: String? = null,
     val startedAt: Long = 0,
-    val now: String? = null,
+    val now: com.lazyexec.droidmcp.Doing? = null,
     val model: String = "",
     val minute: Long = 0,
 ) {

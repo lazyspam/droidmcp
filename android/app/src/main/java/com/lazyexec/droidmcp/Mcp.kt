@@ -131,7 +131,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     Log.i(TAG, "tool call: $name")
                     ActivityLog.add("$name ${args.toString().take(200)}")
                     Island.start(name, args)
-                    Status.current = Island.describe(name, args)
+                    Status.current = Doing(Island.describe(name, args), Island.icon(ctx, name, args))
                     ActivityLog.listener?.invoke()
                     var ok = false
                     var summary = ""

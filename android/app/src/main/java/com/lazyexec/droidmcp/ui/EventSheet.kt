@@ -48,7 +48,8 @@ fun EventSheet(e: AiEvent, state: AppState, onDismiss: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).clip(CircleShape).background(color))
                 Spacer(Modifier.width(10.dp))
-                Text(e.text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                e.icon()?.let { ToolIcon(it, 22) }
+                Text(e.label, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             }
             Text(
                 when (e.ok) { true -> "Succeeded"; false -> "Failed"; null -> "Running" },

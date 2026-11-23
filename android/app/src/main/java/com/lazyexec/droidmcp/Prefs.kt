@@ -204,6 +204,9 @@ object ActivityLog {
     @Synchronized fun text(): String = lines.joinToString("\n")
 }
 
+/** A tool call as shown to the user: its description and an icon drawn before it (see [Island.icon]), if any. */
+data class Doing(val text: String, @androidx.annotation.DrawableRes val icon: Int? = null)
+
 object Status {
     @Volatile var running = false
     @Volatile var relay = "off"
@@ -212,7 +215,7 @@ object Status {
     @Volatile var error: String? = null
     @Volatile var startedAt: Long = 0
     /** The tool call in progress right now (for the Home "Now" card), or null. */
-    @Volatile var current: String? = null
+    @Volatile var current: Doing? = null
     /** Name of the last MCP client that connected (from initialize), e.g. "claude-code 2.1". */
     @Volatile var client: String = ""
 }
