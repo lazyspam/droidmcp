@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
  * Allow / Always allow / Deny (notification, or a dialog when the app is open).
  */
 object Approvals {
-    data class Pending(val key: String, val client: String)
+    /** [client]: the clientInfo name (what "Always" trusts); [label]: name and version, for the prompt. */
+    data class Pending(val key: String, val client: String, val label: String)
 
     private const val CHANNEL = "approvals"
     private const val TIMEOUT_MS = 120_000L
@@ -35,12 +36,13 @@ object Approvals {
         private set
 
     /** Blocks until the owner decides (or [TIMEOUT_MS]). Returns null when allowed, else a reason. */
-    fun check(ctx: Context, key: String, client: String): String? {
+    /** [label]: the client's raw "name version" ([client] plus version), shown in the prompt. */
+    fun check(ctx: Context, key: String, client: String, label: String = client): String? {
         if (!Prefs.approveClients(ctx)) return null
         decisions[key]?.let { return if (it) null else denied(client) }
         if (client in Prefs.trustedClients(ctx)) { decisions[key] = true; return null }
         clients[key] = client
-        val latch = waiters.computeIfAbsent(key) { CountDownLatch(1).also { ask(ctx, key, client) } }
+        val latch = waiters.computeIfAbsent(key) { CountDownLatch(1).also { ask(ctx, key, client, label) } }
         latch.await(TIMEOUT_MS, TimeUnit.MILLISECONDS)
         return when (decisions[key]) {
             true -> null
@@ -65,8 +67,8 @@ object Approvals {
         main.post { if (pending?.key == key) pending = null }
     }
 
-    private fun ask(ctx: Context, key: String, client: String) {
-        main.post { pending = Pending(key, client) }
+    private fun ask(ctx: Context, key: String, client: String, label: String) {
+        main.post { pending = Pending(key, client, label) }
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "AI client approvals", NotificationManager.IMPORTANCE_HIGH))
         fun action(label: String, allow: Boolean, always: Boolean, code: Int): Notification.Action {
@@ -78,7 +80,7 @@ object Approvals {
         val open = PendingIntent.getActivity(ctx, key.hashCode(), Intent(ctx, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_droid)
-            .setContentTitle("Allow $client to control this phone?")
+            .setContentTitle("Allow ${ClientLogos.name(label)} to control this phone?")
             .setContentText("It wants to run tools (screen, input, shell…). Only allow AI clients you started.")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_CALL)

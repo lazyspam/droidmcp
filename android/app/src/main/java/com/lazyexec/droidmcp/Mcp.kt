@@ -125,7 +125,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                     val sid = reqSession.get()
                     val who = sid?.let { sessions[it] } ?: Prefs.lastClient(ctx)
                     val client = who.name.ifBlank { "An AI client" }
-                    Approvals.check(ctx, sid ?: "client:$client", client)?.let { reason ->
+                    Approvals.check(ctx, sid ?: "client:$client", client, who.label)?.let { reason ->
                         ActivityLog.event(AiEvent(System.currentTimeMillis(), name, "Blocked: not approved", false, "", reason, 0, who.label))
                         return result(id, JSONObject().put("isError", true)
                             .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", reason))))

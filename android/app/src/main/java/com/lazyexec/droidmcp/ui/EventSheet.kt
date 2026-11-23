@@ -1,5 +1,6 @@
 package com.lazyexec.droidmcp.ui
 
+import com.lazyexec.droidmcp.ClientLogos
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -61,7 +62,7 @@ fun EventSheet(e: AiEvent, state: AppState, onDismiss: () -> Unit) {
                 Fact("When", SimpleDateFormat("EEE d MMM yyyy, HH:mm:ss", Locale.getDefault()).format(Date(e.time)))
                 Fact("Duration", duration(e.ms))
                 Fact("Tool", e.tool)
-                if (e.client.isNotBlank()) Fact("AI client", e.client) { ClientLogo(e.client, 18, MaterialTheme.colorScheme.onSurface) }
+                if (e.client.isNotBlank()) ClientFact(e.client)
             }
             if (e.args.isNotBlank() && e.args != "{}") Block("Arguments", e.args) { state.copy("arguments", e.args) }
             if (e.result.isNotBlank()) Block(if (e.ok == false) "Error" else "Result", e.result) { state.copy("result", e.result) }
@@ -80,6 +81,22 @@ private fun Fact(label: String, value: String, icon: (@Composable () -> Unit)? =
             modifier = Modifier.width(96.dp))
         icon?.let { it(); Spacer(Modifier.width(8.dp)) }
         Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** The "AI client" row: logo and friendly name ("Claude"); tapping them shows the raw clientInfo in a tooltip. */
+@Composable
+private fun ClientFact(client: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("AI client", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(96.dp))
+        ClientTooltip(client) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ClientLogo(client, 18, MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.width(8.dp))
+                Text(ClientLogos.name(client), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
     }
 }
 

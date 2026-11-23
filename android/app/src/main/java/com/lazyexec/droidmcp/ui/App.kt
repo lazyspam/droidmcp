@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 
@@ -58,9 +59,16 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         val ctx = androidx.compose.ui.platform.LocalContext.current
         androidx.compose.material3.AlertDialog(
             onDismissRequest = {},
-            icon = { ClientLogo(p.client, 40, androidx.compose.material3.MaterialTheme.colorScheme.onSurface) },
-            title = { Text("Allow ${p.client}?") },
-            text = { Text("${p.client} wants to control this phone: screen, input, apps and shell. Only allow AI clients you started yourself.") },
+            icon = { ClientLogo(p.label, 40, androidx.compose.material3.MaterialTheme.colorScheme.onSurface) },
+            title = { Text("Allow ${com.lazyexec.droidmcp.ClientLogos.name(p.label)}?") },
+            text = {
+                androidx.compose.foundation.layout.Column {
+                    Text("${com.lazyexec.droidmcp.ClientLogos.name(p.label)} wants to control this phone: screen, input, apps and shell. Only allow AI clients you started yourself.")
+                    if (p.label.isNotBlank()) Text(p.label, style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp))
+                }
+            },
             confirmButton = {
                 androidx.compose.foundation.layout.Row {
                     androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true, always = true) }) { Text("Always") }
