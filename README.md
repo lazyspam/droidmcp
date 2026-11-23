@@ -93,7 +93,7 @@ Each tool uses root when it's available and the permission-based path otherwise.
 ## Security
 
 - **Token:** clients send `Authorization: Bearer <token>`. It's on by default, and you can turn it off, at your own risk.
-- **Approve on this phone:** optionally, a new AI client must be allowed on the phone (Allow / Always / Deny) before it can run anything.
+- **Approve on this phone:** optionally, a new AI client must be allowed on the phone (Allow / Always / Deny) before it can run anything. Approvals bind to the connection (its server-issued MCP session), not to the name the client reports: "Always" trusts that one session across restarts, and a new session is asked again. Trusted connections are listed, and can be removed, under Settings → Security.
 - **The relay can't control your phone.** It only forwards requests; the phone checks the token. HTTPS ends at the relay, though, so its operator could see your traffic.
 - **Public relay:** `droid.lazyexec.dev` is open to everyone and rate-limited. Each phone claims its device ID with its own secret. For full privacy, run your own relay (below) and set it in **Settings → Connection**.
 

@@ -45,7 +45,7 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
             "POST" -> post(body).let { r ->
                 newSession.get()?.let { sid -> HttpReply(r.status, r.body, r.headers + ("Mcp-Session-Id" to sid)) } ?: r
             }
-            "DELETE" -> { h["mcp-session-id"]?.let { sessions.remove(it); Prefs.removeSession(ctx, it) }; HttpReply(200, "{}") }
+            "DELETE" -> { h["mcp-session-id"]?.let { sessions.remove(it); Prefs.removeSession(ctx, it); Approvals.revoke(ctx, it) }; HttpReply(200, "{}") }
             // No server-initiated stream; spec allows 405 for GET.
             else -> HttpReply(405, """{"error":"method not allowed"}""", mapOf("Allow" to "POST, DELETE"))
         }
@@ -119,13 +119,14 @@ class Mcp(private val ctx: Context, private val tools: Tools) {
                 "tools/call" -> {
                     val name = params.opt("name") as? String
                         ?: return error(id, -32602, "Invalid params: tools/call needs a string 'name'.")
-                    // On-phone approval (if enabled): per session, or per client name for clients without sessions.
                     // This request's own client: with several connected, each action is credited to the one that sent it.
                     // No (or an unknown) session id: the client that connected last.
                     val sid = reqSession.get()
-                    val who = sid?.let { sessions[it] } ?: Prefs.lastClient(ctx)
-                    val client = who.name.ifBlank { "An AI client" }
-                    Approvals.check(ctx, sid ?: "client:$client", client, who.label)?.let { reason ->
+                    val issued = sid?.let { sessions[it] }
+                    val who = issued ?: Prefs.lastClient(ctx)
+                    // On-phone approval (if enabled) binds to the session this server issued, never to the
+                    // self-reported name; only an issued session can be trusted "Always" (see Approvals).
+                    Approvals.check(ctx, sid ?: "client:${who.name}", who, session = issued != null)?.let { reason ->
                         ActivityLog.event(AiEvent(System.currentTimeMillis(), name, "Blocked: not approved", false, "", reason, 0, who.label))
                         return result(id, JSONObject().put("isError", true)
                             .put("content", JSONArray().put(JSONObject().put("type", "text").put("text", reason))))

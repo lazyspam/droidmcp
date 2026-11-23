@@ -74,9 +74,13 @@ object Prefs {
     fun approveClients(c: Context) = p(c).getBoolean("approve_clients", false)
     fun setApproveClients(c: Context, on: Boolean) = p(c).edit().putBoolean("approve_clients", on).apply()
 
-    fun trustedClients(c: Context): Set<String> = p(c).getStringSet("trusted_clients", emptySet())!!.toSet()
-    fun addTrustedClient(c: Context, name: String) = p(c).edit().putStringSet("trusted_clients", trustedClients(c) + name).apply()
-    fun removeTrustedClient(c: Context, name: String) = p(c).edit().putStringSet("trusted_clients", trustedClients(c) - name).apply()
+    /**
+     * Older versions trusted "Always" clients by their self-reported clientInfo name, which any program holding the
+     * token could claim. Those rules are dropped, so the owner is asked again (and "Always" then binds to a session).
+     */
+    fun dropNameTrust(c: Context) {
+        if (p(c).contains("trusted_clients")) p(c).edit().remove("trusted_clients").apply()
+    }
     /** User hid the server notification (root: snoozed indefinitely while the server keeps running). */
     fun notifHidden(c: Context) = p(c).getBoolean("notif_hidden", false)
     fun setNotifHidden(c: Context, on: Boolean) = p(c).edit().putBoolean("notif_hidden", on).apply()
@@ -128,24 +132,53 @@ object Prefs {
     private const val MAX_SESSIONS = 64
     private fun sp(c: Context): SharedPreferences = c.getSharedPreferences("mcp_sessions", Context.MODE_PRIVATE)
 
+    /** A saved MCP session: its client, when it was issued, and whether the owner tapped "Always" for it. */
+    data class SavedSession(val sid: String, val client: McpClient, val time: Long, val trusted: Boolean)
+
+    private fun savedSessions(c: Context): List<SavedSession> = sp(c).all.mapNotNull { (sid, v) ->
+        runCatching { org.json.JSONObject(v as String) }.getOrNull()?.let {
+            SavedSession(sid, McpClient(it.optString("n"), it.optString("v")), it.optLong("t"), it.optBoolean("a"))
+        }
+    }
+
     /** MCP sessions issued so far (session id -> client), so a request keeps its client across service restarts. */
-    fun sessions(c: Context): Map<String, McpClient> = sp(c).all.mapNotNull { (sid, v) ->
-        runCatching { org.json.JSONObject(v as String) }.getOrNull()?.let { sid to McpClient(it.optString("n"), it.optString("v")) }
-    }.toMap()
+    fun sessions(c: Context): Map<String, McpClient> = savedSessions(c).associate { it.sid to it.client }
+
+    private fun entry(s: SavedSession) = org.json.JSONObject().put("n", s.client.name).put("v", s.client.version)
+        .put("t", s.time).apply { if (s.trusted) put("a", true) }.toString()
 
     @Synchronized fun saveSession(c: Context, sid: String, client: McpClient) {
-        val all = sp(c).all
+        val all = savedSessions(c)
         val e = sp(c).edit()
         if (all.size >= MAX_SESSIONS) {
-            // Drop the oldest, so the list stays small.
-            all.entries.sortedBy { runCatching { org.json.JSONObject(it.value as String).optLong("t") }.getOrDefault(0L) }
-                .take(all.size - MAX_SESSIONS + 1).forEach { e.remove(it.key) }
+            // Drop the oldest, so the list stays small; sessions the owner trusts go last.
+            all.sortedWith(compareBy<SavedSession> { it.trusted }.thenBy { it.time })
+                .take(all.size - MAX_SESSIONS + 1).forEach { e.remove(it.sid) }
         }
-        e.putString(sid, org.json.JSONObject().put("n", client.name).put("v", client.version)
-            .put("t", System.currentTimeMillis()).toString()).apply()
+        e.putString(sid, entry(SavedSession(sid, client, System.currentTimeMillis(), false))).apply()
     }
 
     fun removeSession(c: Context, sid: String) = sp(c).edit().remove(sid).apply()
+
+    /** Sessions the owner chose "Always" for, newest first. */
+    fun trustedSessions(c: Context): List<SavedSession> {
+        dropNameTrust(c)
+        return savedSessions(c).filter { it.trusted }.sortedByDescending { it.time }
+    }
+
+    /** True only for a session id this server issued and the owner trusted ("Always"). */
+    fun sessionTrusted(c: Context, sid: String): Boolean {
+        dropNameTrust(c)
+        val v = sp(c).getString(sid, null) ?: return false
+        return runCatching { org.json.JSONObject(v).optBoolean("a") }.getOrDefault(false)
+    }
+
+    /** Marks a session as trusted (or not). [client] rebuilds the entry if it was dropped meanwhile. */
+    @Synchronized fun setSessionTrusted(c: Context, sid: String, trusted: Boolean, client: McpClient? = null) {
+        val cur = savedSessions(c).firstOrNull { it.sid == sid }
+            ?: SavedSession(sid, client ?: return, System.currentTimeMillis(), false)
+        sp(c).edit().putString(sid, entry(cur.copy(trusted = trusted))).apply()
+    }
 
     /** The last client that connected, for requests without a (known) session id. */
     fun lastClient(c: Context) = McpClient(p(c).getString("last_client", "")!!, p(c).getString("last_client_version", "")!!)

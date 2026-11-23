@@ -60,10 +60,10 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
         androidx.compose.material3.AlertDialog(
             onDismissRequest = {},
             icon = { ClientLogo(p.label, 40, androidx.compose.material3.MaterialTheme.colorScheme.onSurface) },
-            title = { Text("Allow ${com.lazyexec.droidmcp.ClientLogos.name(p.label)}?") },
+            title = { Text("Allow ${com.lazyexec.droidmcp.ClientLogos.name(p.label)} for this connection?") },
             text = {
                 androidx.compose.foundation.layout.Column {
-                    Text("${com.lazyexec.droidmcp.ClientLogos.name(p.label)} wants to control this phone: screen, input, apps and shell. Only allow AI clients you started yourself.")
+                    Text(com.lazyexec.droidmcp.promptText(p))
                     if (p.label.isNotBlank()) Text(p.label, style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp))
@@ -71,7 +71,7 @@ fun DroidApp(state: AppState, onStart: () -> Unit, onStop: () -> Unit, onRestart
             },
             confirmButton = {
                 androidx.compose.foundation.layout.Row {
-                    androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true, always = true) }) { Text("Always") }
+                    if (p.session) androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true, always = true) }) { Text("Always") }
                     androidx.compose.material3.TextButton(onClick = { com.lazyexec.droidmcp.Approvals.decide(ctx, p.key, true) }) { Text("Allow") }
                 }
             },

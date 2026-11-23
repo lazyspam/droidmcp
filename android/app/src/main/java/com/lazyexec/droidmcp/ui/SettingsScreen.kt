@@ -327,7 +327,7 @@ private fun SecurityPage(state: AppState, restart: () -> Unit) {
     var shellOn by remember { mutableStateOf(Prefs.allowShell(ctx)) }
     var tokenOn by remember { mutableStateOf(Prefs.requireToken(ctx)) }
     var approve by remember { mutableStateOf(Prefs.approveClients(ctx)) }
-    var trusted by remember { mutableStateOf(Prefs.trustedClients(ctx).sorted()) }
+    var trusted by remember { mutableStateOf(Prefs.trustedSessions(ctx)) }
     var confirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     Section("Who can connect") {
         SwitchRow("Require token", if (tokenOn) "AI clients must send your token" else "Off: anyone who knows your URL can connect",
@@ -342,12 +342,17 @@ private fun SecurityPage(state: AppState, restart: () -> Unit) {
         }
         if (approve && trusted.isNotEmpty()) {
             HorizontalDivider()
-            Text("Always allowed", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Text("Always allowed connections", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp))
-            trusted.forEach { name ->
+            val fmt = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
+            trusted.forEach { s ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { Prefs.removeTrustedClient(ctx, name); trusted = Prefs.trustedClients(ctx).sorted() }) { Text("Remove") }
+                    Column(Modifier.weight(1f)) {
+                        Text(com.lazyexec.droidmcp.ClientLogos.name(s.client.label.ifBlank { "AI client" }), style = MaterialTheme.typography.bodyLarge)
+                        Text("${s.client.label.ifBlank { "unnamed" }} · connected ${fmt.format(java.util.Date(s.time))} · ${s.sid.take(8)}",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = { com.lazyexec.droidmcp.Approvals.revoke(ctx, s.sid); trusted = Prefs.trustedSessions(ctx) }) { Text("Remove") }
                 }
             }
         }
