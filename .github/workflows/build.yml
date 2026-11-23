@@ -71,7 +71,7 @@ jobs:
           node-version: "22"
       - name: Check Node relay
         working-directory: relay
-        run: npm install --omit=dev && node --check server.js
+        run: npm install --omit=dev && node --check server.js && npm test
       - name: Check Cloudflare relay
         working-directory: relay-cloudflare
         run: npx --yes wrangler@4 deploy --dry-run --outdir dist

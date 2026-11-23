@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT || 8080);
 const AGENT_KEY = process.env.AGENT_KEY || "";
 const CLAIMS_FILE = process.env.CLAIMS_FILE || "claims.json";
 
-const TIMEOUT_MS = 610_000; // longer than the phone's 600s max shell timeout
+const TIMEOUT_MS = Number(process.env.REQUEST_TIMEOUT_MS || 610_000); // longer than the phone's 600s max shell timeout
 const MAX_BODY = 50 * 1024 * 1024;
 const MAX_DEVICES = 1000; // phones connected at once
 const MAX_CLAIMS = 10_000; // device IDs remembered
@@ -32,6 +32,13 @@ const DEVICE_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const FORWARD_HEADERS = ["authorization", "content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"];
 const RETURN_HEADERS = /^(content-type|mcp-session-id|www-authenticate|allow|retry-after)$/i;
 const BASE_HEADERS = { "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
+
+// Errors when the phone can't answer: 503 (offline, with Retry-After) and 504 (no answer), never 502. Proxies
+// between the client and the relay (an AI app's MCP gateway, Cloudflare) replace a 502 with their own
+// "Bad gateway" error, so the user never saw the message below.
+const OFFLINE = "Phone is offline: open DroidMCP on the phone and make sure it's running (it should show 'Relay: connected').";
+const OFFLINE_RETRY = "30"; // seconds
+const NO_ANSWER = "Phone didn't answer in time";
 
 if (AGENT_KEY && AGENT_KEY.length < 16) {
   console.error("error: AGENT_KEY must be 16+ characters (or unset it for an open relay).");
@@ -148,7 +155,7 @@ function readBody(req, res, done) {
 function forward(req, res, device, path, body) {
   const ws = agents.get(device);
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    return fail(res, 502, `Phone '${device}' is offline. Check the DroidMCP app is running and shows 'Relay: connected'.`, body);
+    return fail(res, 503, OFFLINE, body, { "Retry-After": OFFLINE_RETRY });
   }
   if ((pendingByDevice.get(device) || 0) >= MAX_PENDING_PER_DEVICE || pending.size >= MAX_PENDING) {
     return fail(res, 429, `Too many requests in flight for '${device}'. Retry shortly.`, body, { "Retry-After": "2" });
@@ -172,10 +179,10 @@ function forward(req, res, device, path, body) {
       res.destroy(); // header values from the phone were invalid
     }
   };
-  const failWith = (status, message) =>
-    finish(status, {}, JSON.stringify({ jsonrpc: "2.0", id: rpcId(body), error: { code: -32000, message } }));
+  const failWith = (status, message, headers = {}) =>
+    finish(status, headers, JSON.stringify({ jsonrpc: "2.0", id: rpcId(body), error: { code: -32000, message } }));
 
-  const timer = setTimeout(() => failWith(504, `Phone '${device}' did not answer within ${Math.round(TIMEOUT_MS / 1000)}s.`), TIMEOUT_MS);
+  const timer = setTimeout(() => failWith(504, `${NO_ANSWER}: no reply within ${Math.round(TIMEOUT_MS / 1000)}s.`), TIMEOUT_MS);
   pending.set(id, { device, finish, failWith });
   track(device, 1);
   res.on("close", () => { if (!done) finish(499, {}, ""); }); // client gave up
@@ -183,7 +190,7 @@ function forward(req, res, device, path, body) {
   const headers = {};
   for (const h of FORWARD_HEADERS) if (req.headers[h]) headers[h] = String(req.headers[h]);
   ws.send(JSON.stringify({ id, method: req.method, path, headers, body }), (err) => {
-    if (err) failWith(502, `Could not reach phone '${device}': ${err.message}`);
+    if (err) failWith(503, OFFLINE, { "Retry-After": OFFLINE_RETRY });
   });
 }
 
@@ -269,7 +276,7 @@ server.on("upgrade", (req, socket, head) => {
       if (agents.get(device) !== ws) return; // a newer connection owns this device now
       agents.delete(device);
       log(`[-] ${device} disconnected (${code})`);
-      for (const p of [...pending.values()]) if (p.device === device) p.failWith(502, `Phone '${device}' disconnected before answering.`);
+      for (const p of [...pending.values()]) if (p.device === device) p.failWith(504, `${NO_ANSWER}: it disconnected before replying. Check DroidMCP is still running, then retry.`);
     });
   });
 });

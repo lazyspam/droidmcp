@@ -24,6 +24,13 @@ const CLAIM_TTL_DAYS = 90;
 const RATE_PER_MIN = 240; // MCP requests per device per minute
 const BASE_HEADERS = { "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" };
 
+// Errors when the phone can't answer: 503 (offline, with Retry-After) and 504 (no answer), never 502. Proxies
+// between the client and the relay (an AI app's MCP gateway, Cloudflare) replace a 502 with their own
+// "Bad gateway" error, so the user never saw the message below.
+const OFFLINE = "Phone is offline: open DroidMCP on the phone and make sure it's running (it should show 'Relay: connected').";
+const OFFLINE_RETRY = "30"; // seconds
+const NO_ANSWER = "Phone didn't answer in time";
+
 /**
  * Per-IP limit using the rate limiter bindings in wrangler.jsonc (AGENT_LIMIT, CLIENT_LIMIT).
  * A relay deployed without them just skips this check.
@@ -112,6 +119,8 @@ export default {
       return env.DEVICE.get(env.DEVICE.idFromName(m[1])).fetch(request);
     } catch (e) {
       console.error("worker error", e);
+      // The device's Durable Object was reset (relay update) or overloaded: worth a retry.
+      if (e?.retryable || e?.overloaded) return fail(503, "Relay is restarting. Retry in a moment.", "", { "Retry-After": "2" });
       return fail(500, `Relay error: ${e.message}`);
     }
   },
@@ -155,8 +164,7 @@ export class Device extends DurableObject {
 
     const ws = this.phone();
     if (!ws) {
-      return fail(502, `Phone '${device}' is offline: it is not connected to the relay. ` +
-        "Check the DroidMCP app is running and shows 'Relay: connected'.", body);
+      return fail(503, OFFLINE, body, { "Retry-After": OFFLINE_RETRY });
     }
     if (this.rateLimited()) {
       return fail(429, `Rate limit: max ${RATE_PER_MIN} requests per minute per device.`, body, { "Retry-After": "10" });
@@ -175,7 +183,7 @@ export class Device extends DurableObject {
     const reply = await new Promise((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        resolve({ status: 504, error: `Phone '${device}' did not answer within ${TIMEOUT_MS / 1000}s.` });
+        resolve({ status: 504, error: `${NO_ANSWER}: no reply within ${TIMEOUT_MS / 1000}s.` });
       }, TIMEOUT_MS);
       this.pending.set(id, (r) => {
         clearTimeout(timer);
@@ -185,11 +193,11 @@ export class Device extends DurableObject {
       try {
         ws.send(JSON.stringify({ id, method: request.method, path: rest + url.search, headers, body }));
       } catch (e) {
-        this.pending.get(id)?.({ status: 502, error: `Could not reach phone '${device}': ${e.message}` });
+        this.pending.get(id)?.({ status: 503, error: OFFLINE, headers: { "Retry-After": OFFLINE_RETRY } });
       }
     });
 
-    if (reply.error) return fail(reply.status, reply.error, body);
+    if (reply.error) return fail(reply.status, reply.error, body, reply.headers);
     const out = new Headers({ ...BASE_HEADERS, "Content-Type": "application/json" });
     for (const [k, v] of Object.entries(reply.headers || {})) {
       if (RETURN_HEADERS.test(k) && typeof v === "string") {
@@ -241,7 +249,7 @@ export class Device extends DurableObject {
     try { ws.close(code === 1005 || code === 1006 ? 1000 : code, "closed"); } catch {}
     if (this.phone()) return; // a replacement connection is already up
     for (const resolve of [...this.pending.values()]) {
-      resolve({ status: 502, error: "Phone disconnected before answering." });
+      resolve({ status: 504, error: `${NO_ANSWER}: it disconnected before replying. Check DroidMCP is still running, then retry.` });
     }
     // Release the device ID if the phone never comes back.
     await this.ctx.storage.setAlarm(Date.now() + CLAIM_TTL_DAYS * 86_400_000);
