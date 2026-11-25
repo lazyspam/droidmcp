@@ -20,14 +20,14 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * In-app updates from GitHub releases (iput-object/droidmcp, tags v<version>, asset DroidMCP-<version>.apk).
+ * In-app updates from GitHub releases (lazyspam/droidmcp, tags v<version>, asset DroidMCP-<version>.apk).
  * Checks once each time the app comes to the foreground (skipped if the last check was under [MIN_GAP_MS] ago,
  * a plain timestamp comparison, no timers or scheduling) and on demand from Settings → About.
  * Requests send If-None-Match with the last ETag, so an unchanged release costs a 304 with no body.
  * The UI ([com.lazyexec.droidmcp.ui.UpdateSheetHost]) observes [sheet].
  */
 object Updater {
-    private const val API = "https://api.github.com/repos/iput-object/droidmcp/releases/latest"
+    private const val API = "https://api.github.com/repos/lazyspam/droidmcp/releases/latest"
     private const val MIN_GAP_MS = 5 * 60 * 1000L
 
     data class Release(val version: String, val notes: String, val apkUrl: String?, val apkName: String, val apkSize: Long, val pageUrl: String)

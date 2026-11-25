@@ -103,7 +103,7 @@ See [SECURITY.md](SECURITY.md) for details. Only use DroidMCP on devices you own
 
 **Cloudflare Workers** (the free tier is enough). One click:
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/iput-object/droidmcp/tree/main/relay-cloudflare)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/lazyspam/droidmcp/tree/main/relay-cloudflare)
 
 Or from the command line:
 

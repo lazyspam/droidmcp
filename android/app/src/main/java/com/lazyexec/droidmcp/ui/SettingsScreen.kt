@@ -463,13 +463,13 @@ private fun AboutPage(state: AppState) {
             style = MaterialTheme.typography.bodyMedium)
     }
     Section("DroidMCP on GitHub") {
-        LinkRow("Source code", "github.com/iput-object/droidmcp", "https://github.com/iput-object/droidmcp")
+        LinkRow("Source code", "github.com/lazyspam/droidmcp", "https://github.com/lazyspam/droidmcp")
         HorizontalDivider()
-        LinkRow("Releases", "Download the latest APK", "https://github.com/iput-object/droidmcp/releases")
+        LinkRow("Releases", "Download the latest APK", "https://github.com/lazyspam/droidmcp/releases")
         HorizontalDivider()
-        LinkRow("Report a problem", "Open an issue", "https://github.com/iput-object/droidmcp/issues")
+        LinkRow("Report a problem", "Open an issue", "https://github.com/lazyspam/droidmcp/issues")
         HorizontalDivider()
-        LinkRow("License", "MIT", "https://github.com/iput-object/droidmcp/blob/main/LICENSE")
+        LinkRow("License", "MIT", "https://github.com/lazyspam/droidmcp/blob/main/LICENSE")
     }
     Section("Built with") {
         LinkRow("Model Context Protocol", "The protocol AI clients speak", "https://modelcontextprotocol.io")
